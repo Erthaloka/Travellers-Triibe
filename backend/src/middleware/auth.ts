@@ -4,7 +4,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
-import { User, IUser, UserRole } from '../models/index.js';
+import { User, IUser, UserRole, Partner } from '../models/index.js';
 import { ApiError } from './errorHandler.js';
 
 // Extend Express Request type
@@ -155,6 +155,53 @@ export const requireRole = (role: UserRole) => authorize(role);
 export const requireAdmin = authorize(UserRole.ADMIN);
 
 /**
- * Require partner role
+ * Require partner role AND partner profile to exist
+ * ⚠️ This checks BOTH:
+ * 1. User has PARTNER role
+ * 2. Partner profile document exists in database
  */
-export const requirePartner = authorize(UserRole.PARTNER, UserRole.ADMIN);
+export const requirePartner = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      return next(new ApiError(401, 'Authentication required'));
+    }
+
+    // Check if user has PARTNER or ADMIN role
+    const hasPartnerRole = req.user.roles.includes(UserRole.PARTNER) || 
+                          req.user.roles.includes(UserRole.ADMIN);
+
+    if (!hasPartnerRole) {
+      return next(new ApiError(403, 'Partner role required'));
+    }
+
+    // ✅ CRITICAL: Check if partner profile exists
+    const partnerProfile = await Partner.findOne({ userId: req.user._id });
+
+    if (!partnerProfile) {
+      return next(
+        new ApiError(
+          403, 
+          'Partner profile not found. Please complete onboarding first.'
+        )
+      );
+    }
+
+    // Check if partner is active
+    if (!partnerProfile.isActive()) {
+      return next(
+        new ApiError(
+          403, 
+          'Partner account is not active. Please contact support.'
+        )
+      );
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};

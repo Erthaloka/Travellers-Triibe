@@ -79,8 +79,8 @@ const startServer = async (): Promise<void> => {
 ║                                                       ║
 ║   🚀 Travellers Triibe API Server                     ║
 ║                                                       ║
-║   Environment: ${env.NODE_ENV.padEnd(38)}║
-║   Port: ${String(env.PORT).padEnd(46)}║
+║   Environment: ${env.NODE_ENV.padEnd(38)}             ║
+║   Port: ${String(env.PORT).padEnd(46)}                ║
 ║   URL: http://localhost:${String(env.PORT).padEnd(30)}║
 ║                                                       ║
 ╚═══════════════════════════════════════════════════════╝
@@ -91,9 +91,7 @@ const startServer = async (): Promise<void> => {
     process.exit(1);
   }
 };
-
 // ============== Graceful Shutdown ==============
-
 const gracefulShutdown = async (signal: string): Promise<void> => {
   console.log(`\n📡 Received ${signal}. Shutting down gracefully...`);
 
@@ -106,7 +104,6 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
     process.exit(1);
   }
 };
-
 // Handle shutdown signals
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
@@ -123,5 +120,4 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Start the server
 startServer();
-
 export default app;

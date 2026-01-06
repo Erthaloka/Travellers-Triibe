@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/config/constants.dart';
 import '../../../routes/app_router.dart';
+import '../../../core/network/api_client.dart';
 
 /// Partner onboarding page with 3 steps
 class PartnerOnboardingPage extends StatefulWidget {
@@ -102,23 +103,90 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
       _isLoading = true;
     });
 
-    // Demo mode: Simulate API call
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      final apiClient = context.read<ApiClient>();
 
-    if (!mounted) return;
+      final categoryMap = {
+        'FOOD': 'RESTAURANT',
+        'STAY': 'HOTEL',
+        'SERVICE': 'OTHER',
+        'RETAIL': 'RETAIL',
+      };
 
-    // Add partner role to account
-    final authProvider = context.read<AuthProvider>();
-    authProvider.addRole(UserRole.partner);
-    await authProvider.switchRole(UserRole.partner);
+      final Map<String, dynamic> onboardingData = {
+        'businessName': _businessNameController.text.trim(),
+        'category': categoryMap[_selectedCategory] ?? 'OTHER',
+        'description': 'Partner business',
+        'businessPhone': '+919876543210',
+        'businessEmail': 'business@test.com',
+        'address': {
+          'line1': 'Test Street',
+          'line2': '',
+          'city': _cityController.text.trim(),
+          'state': _stateController.text.trim(),
+          'pincode': _pincodeController.text.trim(),
+        },
+        'discountRate': _selectedDiscountSlab.toDouble(),
+        'gstNumber': _gstinController.text.trim().toUpperCase(),
+        'panNumber': '',
+      };
 
-    setState(() {
-      _isLoading = false;
-    });
+      debugPrint('🚀 Submitting onboarding data: $onboardingData');
 
-    // Navigate to partner dashboard
-    if (mounted) {
-      context.go(AppRoutes.partnerDashboard);
+      final response = await apiClient.post(
+        '/partners/onboard',
+        body: onboardingData,
+        requiresAuth: true,
+      );
+
+      if (!mounted) return;
+
+      debugPrint('✅ Response - Success: ${response.success}, Status: ${response.statusCode}');
+
+      if (response.success && (response.statusCode == 201 || response.statusCode == 200)) {
+        debugPrint('📦 Response data: ${response.data}');
+
+        final authProvider = context.read<AuthProvider>();
+
+        if (!authProvider.hasRole(UserRole.partner)) {
+          authProvider.addRole(UserRole.partner);
+        }
+        await authProvider.switchRole(UserRole.partner);
+
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Partner registration completed successfully!'),
+              backgroundColor: AppColors.success,
+              duration: Duration(seconds: 2),
+            ),
+          );
+          context.go(AppRoutes.partnerDashboard);
+        }
+      } else {
+        final errorMessage = response.error?.message ?? 'Onboarding failed';
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Onboarding failed: ${e.toString()}'),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+
+      debugPrint('❌ Onboarding error: $e');
     }
   }
 
@@ -135,9 +203,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
       ),
       body: Column(
         children: [
-          // Progress indicator
           _buildProgressIndicator(),
-          // Page content
           Expanded(
             child: PageView(
               controller: _pageController,
@@ -149,7 +215,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
               ],
             ),
           ),
-          // Bottom action
           _buildBottomAction(),
         ],
       ),
@@ -166,7 +231,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           return Expanded(
             child: Row(
               children: [
-                // Step circle
                 Container(
                   width: 32,
                   height: 32,
@@ -174,8 +238,8 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                     color: isCompleted
                         ? AppColors.success
                         : isCurrent
-                            ? AppColors.primary
-                            : AppColors.surfaceVariant,
+                        ? AppColors.primary
+                        : AppColors.surfaceVariant,
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: isCompleted || isCurrent
@@ -187,16 +251,15 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                     child: isCompleted
                         ? const Icon(Icons.check, color: Colors.white, size: 16)
                         : Text(
-                            '${index + 1}',
-                            style: AppTextStyles.labelLarge.copyWith(
-                              color: isCurrent
-                                  ? Colors.white
-                                  : AppColors.textSecondary,
-                            ),
-                          ),
+                      '${index + 1}',
+                      style: AppTextStyles.labelLarge.copyWith(
+                        color: isCurrent
+                            ? Colors.white
+                            : AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                 ),
-                // Connector line
                 if (index < 2)
                   Expanded(
                     child: Container(
@@ -234,7 +297,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 24),
 
-          // Business Name
           TextFormField(
             controller: _businessNameController,
             style: const TextStyle(color: AppColors.textPrimary),
@@ -247,7 +309,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 16),
 
-          // Category
           Text(
             'Business Category',
             style: AppTextStyles.labelLarge.copyWith(
@@ -267,7 +328,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 24),
 
-          // Address
           Text(
             'Business Address',
             style: AppTextStyles.labelLarge.copyWith(
@@ -376,7 +436,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 24),
 
-          // GSTIN input
           TextFormField(
             controller: _gstinController,
             textCapitalization: TextCapitalization.characters,
@@ -396,7 +455,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 16),
 
-          // Legal Business Name
           TextFormField(
             controller: _legalNameController,
             style: const TextStyle(color: AppColors.textPrimary),
@@ -409,7 +467,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 24),
 
-          // GST info box
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -437,8 +494,8 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                 const SizedBox(height: 8),
                 Text(
                   '• Enables proper tax invoicing for customers\n'
-                  '• Required for platform settlement\n'
-                  '• Ensures compliance with regulations',
+                      '• Required for platform settlement\n'
+                      '• Ensures compliance with regulations',
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -448,7 +505,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 24),
 
-          // Consent checkbox
           InkWell(
             onTap: () {
               setState(() {
@@ -505,7 +561,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 24),
 
-          // Discount slab selection
           Text(
             'Discount Slab',
             style: AppTextStyles.labelLarge.copyWith(
@@ -531,7 +586,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 24),
 
-          // Settlement mode
           Text(
             'Settlement Mode',
             style: AppTextStyles.labelLarge.copyWith(
@@ -554,7 +608,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 24),
 
-          // Platform fee info
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -594,7 +647,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
           ),
           const SizedBox(height: 24),
 
-          // Summary
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -677,11 +729,11 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
   }
 
   Widget _buildSettlementOption(
-    String value,
-    String title,
-    String description,
-    IconData icon,
-  ) {
+      String value,
+      String title,
+      String description,
+      IconData icon,
+      ) {
     final isSelected = _settlementMode == value;
     return Material(
       color: isSelected
@@ -800,13 +852,13 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             onPressed: isValid && !_isLoading ? _nextStep : null,
             child: _isLoading
                 ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
                 : Text(isLastStep ? 'Complete Registration' : 'Continue'),
           ),
         ),
