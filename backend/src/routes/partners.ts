@@ -1,3 +1,4 @@
+
 /**
  * Partner routes - Business onboarding and management
  */
@@ -12,7 +13,7 @@ import { env } from '../config/env.js';
 
 const router = Router();
 
-// ============== Validation Schemas ==============
+/* ================= Validation Schemas ================= */
 
 const onboardingSchema = z.object({
   businessName: z.string().min(2, 'Business name is required'),
@@ -47,11 +48,46 @@ const partnerIdSchema = z.object({
   id: z.string().regex(/^[a-fA-F0-9]{24}$/, 'Invalid partner ID'),
 });
 
-// ============== Routes ==============
+/* ================= Routes ================= */
+
+/**
+ * GET /api/partners/onboarding-status
+ * Check if user needs to complete onboarding
+ * Returns: { needsOnboarding: boolean, hasPartnerRole: boolean, profile: Partner | null }
+ */
+router.get(
+  '/onboarding-status',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const hasPartnerRole = req.user!.roles.includes(UserRole.PARTNER);
+    
+    if (!hasPartnerRole) {
+      return res.json({
+        success: true,
+        data: {
+          needsOnboarding: false,
+          hasPartnerRole: false,
+          profile: null,
+        },
+      });
+    }
+
+    const partner = await Partner.findOne({ userId: req.user!._id });
+
+    res.json({
+      success: true,
+      data: {
+        needsOnboarding: !partner,
+        hasPartnerRole: true,
+        profile: partner,
+      },
+    });
+  })
+);
 
 /**
  * POST /api/partners/onboard
- * Complete partner onboarding
+ * Create partner business profile
  */
 router.post(
   '/onboard',
@@ -60,20 +96,22 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!._id;
 
-    // Check if already a partner
-    const existingPartner = await Partner.findOne({ userId });
-    if (existingPartner) {
+    // Check if already onboarded
+    const existing = await Partner.findOne({ userId });
+    if (existing) {
       throw new ApiError(409, 'Partner profile already exists');
     }
 
-    // Create partner profile
+    // Create partner profile (DEV MODE - auto-approve)
     const partner = await Partner.create({
       userId,
       ...req.body,
-      status: PartnerStatus.PENDING,
+      status: PartnerStatus.ACTIVE, // 🔥 DEV: Auto-approve
+      isVerified: true,
+      verifiedAt: new Date(),
     });
 
-    // Add partner role to user if not already present
+    // Add PARTNER role if not present
     if (!req.user!.roles.includes(UserRole.PARTNER)) {
       await User.findByIdAndUpdate(userId, {
         $addToSet: { roles: UserRole.PARTNER },
@@ -81,47 +119,46 @@ router.post(
     }
 
     // Generate QR code data
-    const qrData = JSON.stringify({
+    partner.qrCodeData = JSON.stringify({
       partnerId: partner._id,
       businessName: partner.businessName,
       discountRate: partner.discountRate,
     });
 
-    partner.qrCodeData = qrData;
     await partner.save();
 
     res.status(201).json({
       success: true,
       data: partner,
-      message: 'Partner onboarding submitted. Awaiting verification.',
+      message: 'Partner onboarded successfully',
     });
   })
 );
 
 /**
  * GET /api/partners/profile
- * Get current partner's profile
+ * Get current partner profile
+ * ⚠️ Only authenticate - don't require partner profile to exist yet
  */
 router.get(
   '/profile',
-  authenticate,
-  requirePartner,
+  authenticate, // ✅ Only check if user is logged in
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!._id;
-
-    const partner = await Partner.findOne({ userId }).populate(
+    const partner = await Partner.findOne({ userId: req.user!._id }).populate(
       'userId',
       'name email phone'
     );
 
+    // Return null if no profile exists (user hasn't onboarded yet)
     if (!partner) {
-      throw new ApiError(404, 'Partner profile not found');
+      return res.json({
+        success: true,
+        data: null,
+        message: 'Partner profile not found. Please complete onboarding.',
+      });
     }
 
-    res.json({
-      success: true,
-      data: partner,
-    });
+    res.json({ success: true, data: partner });
   })
 );
 
@@ -132,13 +169,11 @@ router.get(
 router.put(
   '/profile',
   authenticate,
-  requirePartner,
+  requirePartner, // ✅ Now require partner profile to exist
   validateBody(updateProfileSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!._id;
-
     const partner = await Partner.findOneAndUpdate(
-      { userId },
+      { userId: req.user!._id },
       { $set: req.body },
       { new: true, runValidators: true }
     );
@@ -147,25 +182,21 @@ router.put(
       throw new ApiError(404, 'Partner profile not found');
     }
 
-    res.json({
-      success: true,
-      data: partner,
-    });
+    res.json({ success: true, data: partner });
   })
 );
 
 /**
  * GET /api/partners/qr-code
- * Generate QR code for partner
+ * Generate QR code for partner payments
  */
 router.get(
   '/qr-code',
   authenticate,
   requirePartner,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!._id;
-
-    const partner = await Partner.findOne({ userId });
+    const partner = await Partner.findOne({ userId: req.user!._id });
+    
     if (!partner) {
       throw new ApiError(404, 'Partner profile not found');
     }
@@ -174,7 +205,7 @@ router.get(
       throw new ApiError(403, 'Partner account is not active');
     }
 
-    // Generate QR code with partner payment data
+    // Generate QR code data
     const qrData = {
       type: 'TT_PAYMENT',
       partnerId: partner._id,
@@ -183,7 +214,7 @@ router.get(
       timestamp: Date.now(),
     };
 
-    const qrCodeDataUrl = await QRCode.toDataURL(JSON.stringify(qrData), {
+    const qrCode = await QRCode.toDataURL(JSON.stringify(qrData), {
       errorCorrectionLevel: 'M',
       width: 300,
       margin: 2,
@@ -191,10 +222,7 @@ router.get(
 
     res.json({
       success: true,
-      data: {
-        qrCode: qrCodeDataUrl,
-        qrData,
-      },
+      data: { qrCode, qrData },
     });
   })
 );
@@ -208,76 +236,20 @@ router.get(
   authenticate,
   requirePartner,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!._id;
-
-    const partner = await Partner.findOne({ userId });
+    const partner = await Partner.findOne({ userId: req.user!._id });
+    
     if (!partner) {
       throw new ApiError(404, 'Partner profile not found');
     }
 
-    // Get date ranges
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    // Aggregate order data
-    const { Order, OrderStatus } = await import('../models/index.js');
-
-    const [dailyStats, weeklyTrend] = await Promise.all([
-      // Daily stats for the last 7 days
-      Order.aggregate([
-        {
-          $match: {
-            partnerId: partner._id,
-            status: OrderStatus.COMPLETED,
-            createdAt: { $gte: thisWeek },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
-            },
-            orders: { $sum: 1 },
-            revenue: { $sum: '$finalAmount' },
-            discount: { $sum: '$discountAmount' },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
-      // Category breakdown (if applicable)
-      Order.aggregate([
-        {
-          $match: {
-            partnerId: partner._id,
-            status: OrderStatus.COMPLETED,
-            createdAt: { $gte: thisMonth },
-          },
-        },
-        {
-          $group: {
-            _id: { $hour: '$createdAt' },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
-    ]);
-
     res.json({
       success: true,
-      data: {
-        summary: partner.analytics,
-        dailyStats,
-        peakHours: weeklyTrend,
-        discountRate: partner.discountRate,
-      },
+      data: partner.analytics,
     });
   })
 );
 
-// ============== Public Routes ==============
+/* ================= Public Routes ================= */
 
 /**
  * GET /api/partners/:id/public
@@ -308,11 +280,11 @@ router.get(
   })
 );
 
-// ============== Admin Routes ==============
+/* ================= Admin Routes ================= */
 
 /**
  * GET /api/partners/admin/pending
- * Get pending partner applications (Admin only)
+ * Get pending partner applications
  */
 router.get(
   '/admin/pending',
@@ -332,7 +304,7 @@ router.get(
 
 /**
  * PUT /api/partners/admin/:id/verify
- * Verify or reject partner application (Admin only)
+ * Verify or reject partner application
  */
 router.put(
   '/admin/:id/verify',
@@ -341,7 +313,7 @@ router.put(
   validateParams(partnerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { approved, reason: _reason } = req.body;
+    const { approved, reason } = req.body;
 
     const partner = await Partner.findById(id);
     if (!partner) {
@@ -354,7 +326,10 @@ router.put(
       partner.verifiedAt = new Date();
     } else {
       partner.status = PartnerStatus.REJECTED;
-      // Could store rejection reason (_reason) in metadata
+      // Store rejection reason in description or metadata
+      if (reason) {
+        partner.description = `Rejected: ${reason}`;
+      }
     }
 
     await partner.save();
@@ -362,7 +337,7 @@ router.put(
     res.json({
       success: true,
       data: partner,
-      message: approved ? 'Partner verified' : 'Partner rejected',
+      message: approved ? 'Partner verified successfully' : 'Partner rejected',
     });
   })
 );

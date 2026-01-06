@@ -98,6 +98,9 @@ class AuthProvider extends ChangeNotifier {
   /// Set pending signup role (called from profile selection)
   void setSignupRole(String role) {
     _pendingSignupRole = role;
+    if (kDebugMode) {
+      print('✅ AuthProvider: Signup role set to: $_pendingSignupRole');
+    }
   }
 
   /// Initialize auth state from storage
@@ -228,6 +231,10 @@ class AuthProvider extends ChangeNotifier {
         return false;
       }
 
+      if (kDebugMode) {
+        print('🔵 Google Sign-In: Sending role = ${_pendingSignupRole?.toLowerCase() ?? 'user'}');
+      }
+
       // Send to backend for verification
       final response = await _apiClient.post(
         ApiEndpoints.firebaseAuth,
@@ -235,7 +242,7 @@ class AuthProvider extends ChangeNotifier {
           'idToken': idToken ?? accessToken,
           'email': googleUser.email,
           'name': googleUser.displayName ?? 'User',
-          'role': _pendingSignupRole?.toLowerCase() ?? 'user',
+          'role': _pendingSignupRole?.toLowerCase() ?? 'user', // ✅ CRITICAL: Send role
         },
         requiresAuth: false,
       );
@@ -248,6 +255,7 @@ class AuthProvider extends ChangeNotifier {
         if (token != null && accountData != null) {
           _account = Account.fromJson(accountData);
 
+          // Set active role based on signup selection
           final signupRole = UserRole.fromString(_pendingSignupRole ?? 'user');
           if (_account!.hasRole(signupRole)) {
             _activeRole = signupRole;
@@ -261,7 +269,7 @@ class AuthProvider extends ChangeNotifier {
             role: _activeRole.name.toUpperCase(),
           );
 
-          _pendingSignupRole = null;
+          _pendingSignupRole = null; // Clear after use
           _state = AuthState.authenticated;
           notifyListeners();
           return true;
@@ -292,6 +300,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (kDebugMode) {
+        print('🔵 Signup: Sending role = ${_pendingSignupRole?.toLowerCase() ?? 'user'}');
+        print('🔵 Signup payload: name=$name, email=$email, phone=$phone, role=${_pendingSignupRole?.toLowerCase() ?? 'user'}');
+      }
+
       final response = await _apiClient.post(
         ApiEndpoints.signup,
         body: {
@@ -299,6 +312,7 @@ class AuthProvider extends ChangeNotifier {
           'email': email,
           'password': password,
           'phone': phone,
+          'role': _pendingSignupRole?.toLowerCase() ?? 'user', // ✅ CRITICAL FIX: Send role parameter
         },
         requiresAuth: false,
       );
@@ -311,8 +325,22 @@ class AuthProvider extends ChangeNotifier {
         if (token != null && accountData != null) {
           _account = Account.fromJson(accountData);
 
-          if (_account!.roles.isNotEmpty) {
+          if (kDebugMode) {
+            print('✅ Signup successful! User roles: ${_account!.roles}');
+          }
+
+          // ✅ UPDATED: Set active role based on signup selection
+          final signupRole = UserRole.fromString(_pendingSignupRole ?? 'user');
+          if (_account!.hasRole(signupRole)) {
+            _activeRole = signupRole;
+            if (kDebugMode) {
+              print('✅ Active role set to: $_activeRole');
+            }
+          } else if (_account!.roles.isNotEmpty) {
             _activeRole = _account!.roles.first;
+            if (kDebugMode) {
+              print('⚠️ Signup role not found in account, using first role: $_activeRole');
+            }
           }
 
           await _secureStorage.saveSession(
@@ -321,7 +349,7 @@ class AuthProvider extends ChangeNotifier {
             role: _activeRole.name.toUpperCase(),
           );
 
-          _pendingSignupRole = null;
+          _pendingSignupRole = null; // ✅ Clear after successful signup
           _state = AuthState.authenticated;
           notifyListeners();
           return true;
@@ -367,6 +395,7 @@ class AuthProvider extends ChangeNotifier {
     _activeRole = UserRole.user;
     _state = AuthState.unauthenticated;
     _errorMessage = null;
+    _pendingSignupRole = null; // ✅ Also clear pending role on logout
     notifyListeners();
   }
 

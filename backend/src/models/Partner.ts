@@ -1,3 +1,4 @@
+
 /**
  * Partner model - represents business/merchant partners
  */

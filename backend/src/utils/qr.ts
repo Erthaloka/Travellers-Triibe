@@ -1,3 +1,4 @@
+
 /**
  * File: qr.ts
  * Purpose: QR code token generation and validation utilities

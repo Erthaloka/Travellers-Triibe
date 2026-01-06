@@ -1,3 +1,4 @@
+
 /**
  * Authentication routes - Firebase Auth integration
  */

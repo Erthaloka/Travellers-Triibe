@@ -1,3 +1,4 @@
+
 /**
  * User model - represents app users (customers)
  */
