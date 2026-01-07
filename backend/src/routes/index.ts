@@ -28,4 +28,9 @@ router.use('/orders', orderRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/bills', billRoutes);
 
+// Support /v1 prefix and singular /payment path for backward compatibility
+const v1Router = Router();
+v1Router.use('/payment', paymentRoutes); // /api/v1/payment/* routes
+router.use('/v1', v1Router);
+
 export default router;

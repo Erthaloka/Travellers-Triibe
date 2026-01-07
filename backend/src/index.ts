@@ -11,6 +11,7 @@ import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
+import webhookRoutes from './routes/webhooks.js';
 
 // Initialize Express app
 const app: Express = express();
@@ -44,6 +45,9 @@ app.set('trust proxy', 1);
 
 // ============== Routes ==============
 
+// Webhook routes (mounted before API routes, no /api prefix)
+app.use('/webhooks', webhookRoutes);
+
 // API routes
 app.use('/api', routes);
 
@@ -67,6 +71,67 @@ app.use(errorHandler);
 
 // ============== Server Startup ==============
 
+// TEMPORARY: Debug function to print all registered routes
+// TODO: Remove after debugging
+const printRoutes = (app: Express): void => {
+  console.log('\n📋 Registered Routes:\n');
+  
+  const routes: Array<{ method: string; path: string }> = [];
+  
+  const processLayer = (layer: any, path: string = ''): void => {
+    if (!layer) return;
+    
+    // Handle direct routes
+    if (layer.route) {
+      const routePath = path + (layer.route.path === '/' ? '' : layer.route.path);
+      layer.route.stack.forEach((stack: any) => {
+        const method = (stack.method || 'all').toUpperCase();
+        routes.push({ method, path: routePath || '/' });
+      });
+    }
+    // Handle router middleware
+    else if (layer.name === 'router' || layer.name === 'bound dispatch') {
+      const router = layer.handle;
+      if (router && router.stack) {
+        // Extract the base path from the regex
+        let basePath = path;
+        if (layer.regexp) {
+          const match = layer.regexp.source.match(/^\\\/(.*)\\\//);
+          if (match && match[1]) {
+            basePath = path + '/' + match[1].replace(/\\\//g, '/');
+          }
+        }
+        
+        router.stack.forEach((stack: any) => {
+          processLayer(stack, basePath);
+        });
+      }
+    }
+  };
+  
+  // Process all layers in the app
+  if ((app as any)._router && (app as any)._router.stack) {
+    (app as any)._router.stack.forEach((layer: any) => {
+      processLayer(layer);
+    });
+  }
+  
+  // Sort routes
+  routes.sort((a, b) => {
+    if (a.path !== b.path) {
+      return a.path.localeCompare(b.path);
+    }
+    return a.method.localeCompare(b.method);
+  });
+  
+  // Print routes
+  routes.forEach(({ method, path }) => {
+    console.log(`  ${method.padEnd(6)} ${path}`);
+  });
+  
+  console.log(`\n✅ Total routes: ${routes.length}\n`);
+};
+
 const startServer = async (): Promise<void> => {
   try {
     // Connect to MongoDB
@@ -85,6 +150,10 @@ const startServer = async (): Promise<void> => {
 ║                                                       ║
 ╚═══════════════════════════════════════════════════════╝
       `);
+      
+      // TEMPORARY: Print all registered routes for debugging
+      // TODO: Remove after debugging
+      printRoutes(app);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

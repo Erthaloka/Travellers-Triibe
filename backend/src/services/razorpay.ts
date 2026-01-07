@@ -3,7 +3,10 @@
  */
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import { env } from '../config/env.js';
+import { Order, IOrder } from '../models/Order.js';
+import { ApiError } from '../middleware/errorHandler.js';
 
 // Initialize Razorpay instance
 export const razorpay = new Razorpay({
@@ -125,4 +128,60 @@ export const createVirtualAccount = async (
     customer_id: customerId,
     order_id: orderId,
   };
+};
+
+/**
+ * Create Razorpay order and update MongoDB order record
+ * @param orderId - MongoDB order document ID or order document
+ * @param netPayableAmount - Net payable amount in paise
+ * @param options - Optional parameters for Razorpay order
+ * @returns Updated order details with Razorpay order information
+ */
+export const createRazorpayOrderAndUpdate = async (
+  orderId: string | mongoose.Types.ObjectId | IOrder,
+  netPayableAmount: number,
+  options?: {
+    currency?: string;
+    receipt?: string;
+    notes?: Record<string, string>;
+  }
+): Promise<IOrder> => {
+  // Find order if orderId is provided as string or ObjectId
+  let order: IOrder | null;
+  
+  if (typeof orderId === 'string' || orderId instanceof mongoose.Types.ObjectId) {
+    order = await Order.findById(orderId);
+    if (!order) {
+      throw new ApiError(404, `Order not found with ID: ${orderId}`);
+    }
+  } else {
+    order = orderId;
+  }
+
+  // Validate net payable amount
+  if (netPayableAmount <= 0) {
+    throw new ApiError(400, 'Net payable amount must be greater than 0');
+  }
+
+  // Create receipt if not provided
+  const receipt = options?.receipt || `order_${order.orderId}_${Date.now()}`;
+
+  // Create Razorpay order
+  const razorpayOrder = await createRazorpayOrder({
+    amount: netPayableAmount,
+    currency: options?.currency || 'INR',
+    receipt,
+    notes: {
+      orderId: order.orderId,
+      userId: order.userId.toString(),
+      partnerId: order.partnerId.toString(),
+      ...options?.notes,
+    },
+  });
+
+  // Update MongoDB order with Razorpay order ID
+  order.razorpayOrderId = razorpayOrder.id;
+  await order.save();
+
+  return order;
 };

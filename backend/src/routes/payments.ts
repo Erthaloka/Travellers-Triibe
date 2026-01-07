@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { asyncHandler, ApiError } from '../middleware/errorHandler.js';
 import { validateBody } from '../middleware/validate.js';
 import { authenticate } from '../middleware/auth.js';
+import mongoose from 'mongoose';
 import { Order, OrderStatus, Partner, User } from '../models/index.js';
 import {
   createRazorpayOrder,
@@ -31,7 +32,99 @@ const verifyPaymentSchema = z.object({
   razorpaySignature: z.string(),
 });
 
+const preparePaymentSchema = z.object({
+  merchant_id: z.string(), // Can be MongoDB ObjectId or custom merchant ID
+  bill_amount: z.number().min(0.01, 'Bill amount must be at least ₹0.01'),
+});
+
 // ============== Routes ==============
+
+/**
+ * POST /api/payments/prepare
+ * POST /api/v1/payment/prepare (alternative path)
+ * Prepare payment - creates order and Razorpay order without payment
+ */
+router.post(
+  '/prepare',
+  validateBody(preparePaymentSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    console.log('preparePayment route hit');
+    const { merchant_id, bill_amount } = req.body;
+    const userId = null;
+
+    // Convert bill_amount from rupees to paise
+    const billAmountInPaise = Math.round(bill_amount * 100);
+
+    // Find partner by ID (merchant_id can be MongoDB ObjectId)
+    let partner;
+    if (mongoose.Types.ObjectId.isValid(merchant_id)) {
+      partner = await Partner.findById(merchant_id);
+    } else {
+      // If not a valid ObjectId, try to find by custom merchant ID if it exists
+      throw new ApiError(400, 'Invalid merchant ID format');
+    }
+
+    if (!partner || !partner.isActive()) {
+      throw new ApiError(404, 'Merchant not found or not active');
+    }
+
+    // Calculate discount
+    const discountRate = partner.discountRate;
+    const discountAmount = Math.round((billAmountInPaise * discountRate) / 100);
+    const finalAmount = billAmountInPaise - discountAmount;
+
+    // Platform fee (example: 2% of final amount)
+    const platformFee = Math.round((finalAmount * 2) / 100);
+    const partnerPayout = finalAmount - platformFee;
+
+    // Create Razorpay order
+    const razorpayOrder = await createRazorpayOrder({
+      amount: finalAmount, // Amount in paise
+      currency: 'INR',
+      receipt: `prep_${Date.now()}`,
+      notes: {
+        userId: "DEV_USER",
+        partnerId: partner._id.toString(),
+        originalAmount: billAmountInPaise.toString(),
+        discountRate: discountRate.toString(),
+      },
+    });
+
+    // Create order in database (but don't mark as paid yet)
+    const order = await Order.create({
+      userId: partner._id, // TEMP: use merchant as user for dev-only testing
+      partnerId: partner._id,
+      originalAmount: billAmountInPaise,
+      discountRate,
+      discountAmount,
+      finalAmount,
+      partnerPayout,
+      platformFee,
+      razorpayOrderId: razorpayOrder.id,
+      status: OrderStatus.PENDING,
+    });
+
+    // Return response matching API documentation format
+    res.status(201).json({
+      order_id: order.orderId,
+      merchant: {
+        name: partner.businessName,
+        category: partner.category,
+      },
+      amounts: {
+        gross: bill_amount, // in rupees
+        discount_percent: discountRate,
+        discount: discountAmount / 100, // in rupees
+        net_payable: finalAmount / 100, // in rupees
+      },
+      razorpay: {
+        order_id: razorpayOrder.id,
+        amount: finalAmount, // in paise
+        currency: 'INR',
+      },
+    });
+  })
+);
 
 /**
  * POST /api/payments/create

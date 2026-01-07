@@ -3,8 +3,9 @@
  */
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import { env } from '../config/env.js';
-import { User, IUser, UserRole } from '../models/index.js';
+import { User, IUser, UserRole, AccountStatus } from '../models/index.js';
 import { ApiError } from './errorHandler.js';
 
 // Extend Express Request type
@@ -69,6 +70,30 @@ export const authenticate = async (
     // Verify token
     const decoded = verifyToken(token);
 
+    // 🔴 DEV LOGIN BYPASS (LOCAL ONLY)
+    if (env.NODE_ENV === 'development' && decoded.userId === 'dev-user-id') {
+      // Create mock user object for dev bypass
+      const mockUser = {
+        _id: new mongoose.Types.ObjectId('000000000000000000000000'),
+        email: decoded.email || 'dev@example.com',
+        phone: '+919999999999',
+        name: 'Dev User',
+        roles: (decoded.roles || [UserRole.USER]) as UserRole[],
+        status: AccountStatus.ACTIVE,
+        totalSavings: 0,
+        totalOrders: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        hasRole: (role: UserRole) => (decoded.roles || [UserRole.USER]).includes(role),
+        isActive: () => true,
+      } as IUser;
+
+      req.user = mockUser;
+      req.userId = 'dev-user-id';
+      return next();
+    }
+
+    // NORMAL FLOW (PRODUCTION)
     // Get user from database
     const user = await User.findById(decoded.userId);
 
