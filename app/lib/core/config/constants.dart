@@ -1,6 +1,7 @@
 /// File: constants.dart
 /// Purpose: App-wide constants and enums
 /// Context: Used throughout the app for consistent values
+library;
 
 /// User roles in the system
 enum UserRole {

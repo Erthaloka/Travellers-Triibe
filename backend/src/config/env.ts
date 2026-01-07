@@ -17,7 +17,7 @@ const envSchema = z.object({
   MONGODB_URI: z.string().min(1, 'MongoDB URI is required'),
 
   // Firebase Auth
-  FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('./travellers-triibe-firebase-adminsdk-fbsvc-c5f6474fd0.json'),
+  FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('./travellers-triibe-firebase-adminsdk-fbsvc-715ff03ea8.json'),
 
   // Supabase (for storage/realtime) - truly optional
   SUPABASE_URL: z.string().url().optional().or(z.literal('')),

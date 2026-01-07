@@ -325,7 +325,7 @@ class UserSavingsPage extends StatelessWidget {
           const SizedBox(height: 16),
           ...savings.monthlyHistory
               .map((month) => _buildMonthRow(month))
-              .toList(),
+              ,
         ],
       ),
     );

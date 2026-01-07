@@ -1,6 +1,7 @@
 /// File: app_theme.dart
 /// Purpose: Light theme configuration for the app
 /// Context: Single source of truth for all colors and text styles
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,30 +9,30 @@ import 'package:flutter/services.dart';
 /// App color palette - Light Theme
 class AppColors {
   // Primary colors - Light theme base
-  static const Color background = Color(0xFFFFFFFF);
-  static const Color surface = Color(0xFFFAFAFA);
-  static const Color surfaceVariant = Color(0xFFF5F5F5);
+  static const Color background = Color.fromARGB(255, 233, 239, 246);
+  static const Color surface = Color.fromARGB(255, 255, 255, 255);
+  static const Color surfaceVariant = Color.fromARGB(255, 249, 248, 248);
 
   // Text colors
   static const Color textPrimary = Color(0xFF1A1A1A);
-  static const Color textSecondary = Color(0xFF666666);
+  static const Color textSecondary = Color(0xFFA8A8A8);
   static const Color textHint = Color(0xFF999999);
   static const Color textOnPrimary = Color(0xFFFFFFFF);
 
   // Accent colors
-  static const Color primary = Color(0xFF5B4ED9);
-  static const Color primaryVariant = Color(0xFF4A3FC7);
+  static const Color primary = Color(0xFF2C6E91);
+  static const Color primaryVariant = Color(0xFF2C6E91);
   static const Color primaryLight = Color(0xFFEEECFB);
   static const Color secondary = Color(0xFF00BFA5);
 
   // Status colors
   static const Color success = Color(0xFF22C55E);
   static const Color successLight = Color(0xFFDCFCE7);
-  static const Color warning = Color(0xFFF59E0B);
+  static const Color warning = Color(0xFFF4C95D);
   static const Color warningLight = Color(0xFFFEF3C7);
   static const Color error = Color(0xFFEF4444);
   static const Color errorLight = Color(0xFFFEE2E2);
-  static const Color info = Color(0xFF3B82F6);
+  static const Color info = Color(0xFF2C6E91);
   static const Color infoLight = Color(0xFFDBEAFE);
 
   // Savings highlight color
@@ -39,11 +40,11 @@ class AppColors {
   static const Color savingsGreenLight = Color(0xFFD1FAE5);
 
   // Role-specific accent colors
-  static const Color userAccent = Color(0xFF5B4ED9);       // Professional purple
+  static const Color userAccent = Color(0xFF2C6E91); // Professional purple
   static const Color userAccentLight = Color(0xFFEEECFB);
-  static const Color partnerAccent = Color(0xFFEA580C);    // Professional orange
+  static const Color partnerAccent = Color(0xFFD98E73); // Professional orange
   static const Color partnerAccentLight = Color(0xFFFFF7ED);
-  static const Color adminAccent = Color(0xFF0891B2);      // Professional cyan
+  static const Color adminAccent = Color(0xFF0891B2); // Professional cyan
   static const Color adminAccentLight = Color(0xFFECFEFF);
 
   // Divider and border
@@ -65,7 +66,7 @@ class AppColors {
 
 /// App text styles
 class AppTextStyles {
-  static const String _fontFamily = 'Inter';
+  static const String fontFamily = 'Inter';
 
   // Headings
   static const TextStyle h1 = TextStyle(
@@ -208,10 +209,7 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
         ),
-        iconTheme: IconThemeData(
-          color: AppColors.textPrimary,
-          size: 24,
-        ),
+        iconTheme: IconThemeData(color: AppColors.textPrimary, size: 24),
         systemOverlayStyle: SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: Brightness.dark,
@@ -255,7 +253,9 @@ class AppTheme {
             borderRadius: BorderRadius.circular(12),
           ),
           side: const BorderSide(color: AppColors.border, width: 1.5),
-          textStyle: AppTextStyles.button.copyWith(color: AppColors.textPrimary),
+          textStyle: AppTextStyles.button.copyWith(
+            color: AppColors.textPrimary,
+          ),
         ),
       ),
 
@@ -292,10 +292,17 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.error, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textHint),
-        labelStyle: AppTextStyles.labelLarge.copyWith(color: AppColors.textSecondary),
-        floatingLabelStyle: AppTextStyles.labelMedium.copyWith(color: AppColors.primary),
+        labelStyle: AppTextStyles.labelLarge.copyWith(
+          color: AppColors.textSecondary,
+        ),
+        floatingLabelStyle: AppTextStyles.labelMedium.copyWith(
+          color: AppColors.primary,
+        ),
         prefixIconColor: AppColors.textSecondary,
         suffixIconColor: AppColors.textSecondary,
       ),
@@ -329,9 +336,7 @@ class AppTheme {
         selectedColor: AppColors.primaryLight,
         disabledColor: AppColors.surfaceVariant,
         labelStyle: AppTextStyles.labelMedium,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         side: const BorderSide(color: AppColors.border),
       ),
 
@@ -341,9 +346,7 @@ class AppTheme {
         contentTextStyle: AppTextStyles.bodyMedium.copyWith(
           color: AppColors.background,
         ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         behavior: SnackBarBehavior.floating,
         elevation: 4,
       ),
@@ -352,9 +355,7 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.background,
         elevation: 8,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         titleTextStyle: AppTextStyles.h3,
         contentTextStyle: AppTextStyles.bodyMedium,
       ),
@@ -369,10 +370,7 @@ class AppTheme {
       ),
 
       // Icons
-      iconTheme: const IconThemeData(
-        color: AppColors.textPrimary,
-        size: 24,
-      ),
+      iconTheme: const IconThemeData(color: AppColors.textPrimary, size: 24),
 
       // List tile
       listTileTheme: const ListTileThemeData(

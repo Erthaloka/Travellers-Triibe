@@ -141,7 +141,7 @@ class _WelcomePageState extends State<WelcomePage> {
     }
   }
 
-  void _navigateToHome() {
+  void navigateToHome() {
     final authProvider = context.read<AuthProvider>();
     if (_selectedProfile == 'partner') {
       // Check if user needs onboarding
@@ -184,9 +184,7 @@ class _WelcomePageState extends State<WelcomePage> {
                 const SizedBox(height: 24),
                 _buildProfileSelection(),
                 const SizedBox(height: 24),
-                if (_selectedProfile != null) ...[
-                  _buildLoginSection(),
-                ],
+                if (_selectedProfile != null) ...[_buildLoginSection()],
                 const SizedBox(height: 16),
               ],
             ),
@@ -207,8 +205,8 @@ class _WelcomePageState extends State<WelcomePage> {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.3),
-                blurRadius: 16,
+                color: AppColors.primary.withOpacity(1),
+                blurRadius: 15,
                 offset: const Offset(0, 6),
               ),
             ],
@@ -375,9 +373,7 @@ class _WelcomePageState extends State<WelcomePage> {
         // Login header
         Text(
           'Login',
-          style: AppTextStyles.h4.copyWith(
-            color: AppColors.textPrimary,
-          ),
+          style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
         ),
         const SizedBox(height: 16),
 
@@ -430,9 +426,7 @@ class _WelcomePageState extends State<WelcomePage> {
         // Login button
         ElevatedButton(
           onPressed: _isLoading ? null : _login,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: accentColor,
-          ),
+          style: ElevatedButton.styleFrom(backgroundColor: accentColor),
           child: _isLoading
               ? const SizedBox(
                   height: 20,
@@ -576,5 +570,4 @@ class _WelcomePageState extends State<WelcomePage> {
       ),
     );
   }
-
 }
