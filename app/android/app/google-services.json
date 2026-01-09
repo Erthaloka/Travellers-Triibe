@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "575967435374",
+    "project_id": "travellers-triibe",
+    "storage_bucket": "travellers-triibe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:575967435374:android:e2934909039fca6ff0647f",
+        "android_client_info": {
+          "package_name": "com.travellers_triibe.travellers_triibe"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "575967435374-4durotqi15cj488c5m84uf27mpmbo9v7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.travellers_triibe.travellers_triibe",
+            "certificate_hash": "2ff712ddc61c41abe89e52f1c96d5e16faaeeb09"
+          }
+        },
+        {
+          "client_id": "575967435374-ik74dk4rv5k0pqt7vvv1qq8u1ll050qv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyXef02MmDZpoTwK-GTo9tQ6nENxqVhdg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "575967435374-ik74dk4rv5k0pqt7vvv1qq8u1ll050qv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "575967435374-ukcuq9n5r36914qd5cejfnjnel0mahnc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.travellerstriibe.travellersTriibe"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -142,13 +142,14 @@ router.post(
 /**
  * Verify Google access token using Google's tokeninfo endpoint
  */
-async function verifyGoogleAccessToken(accessToken: string): Promise<{ email: string; name?: string; picture?: string } | null> {
+
+async function verifyGoogleAccessToken(accessToken: string): Promise<{ email?: string; name?: string; picture?: string } | null> {
   try {
     const response = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) return null;
-    const data = await response.json();
+    const data = await response.json() as { email?: string; name?: string; picture?: string };
     return {
       email: data.email,
       name: data.name,
@@ -188,12 +189,12 @@ router.post(
         email = googleUser.email;
         name = googleUser.name;
         picture = googleUser.picture;
-        uid = `google_${email}`; // Generate a pseudo-UID for Google-only auth
+        uid = email ? `google_${email}` : undefined; // Generate a pseudo-UID for Google-only auth
       } else if (providedEmail) {
         // Fallback to provided email/name (for web where we can't verify)
         email = providedEmail;
         name = providedName;
-        uid = `web_${email}`;
+        uid = email ? `web_${email}` : undefined;
       } else {
         throw new ApiError(401, 'Invalid authentication token');
       }

@@ -1,6 +1,7 @@
 /// File: api_endpoints.dart
 /// Purpose: All API endpoint constants
 /// Context: Single source of truth for API routes
+library;
 
 class ApiEndpoints {
   // ============== AUTH ==============

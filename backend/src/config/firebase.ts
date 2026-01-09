@@ -4,6 +4,7 @@
 import admin from 'firebase-admin';
 import { env } from './env.js';
 import path from 'path';
+import fs from 'fs';
 
 // Initialize Firebase Admin
 const initializeFirebase = (): admin.app.App => {
@@ -16,6 +17,13 @@ const initializeFirebase = (): admin.app.App => {
     process.cwd(),
     env.FIREBASE_SERVICE_ACCOUNT_PATH
   );
+
+  // Ensure file exists and provide a clear error if not
+  if (!fs.existsSync(serviceAccountPath)) {
+    console.error(`Firebase service account file not found at: ${serviceAccountPath}`);
+    console.error('Download a service account JSON from Firebase Console and set FIREBASE_SERVICE_ACCOUNT_PATH in your .env');
+    process.exit(1);
+  }
 
   return admin.initializeApp({
     credential: admin.credential.cert(serviceAccountPath),

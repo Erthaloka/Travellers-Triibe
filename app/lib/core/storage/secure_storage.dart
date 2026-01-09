@@ -1,6 +1,7 @@
 /// File: secure_storage.dart
 /// Purpose: Secure token and sensitive data storage
 /// Context: Used for JWT tokens and user session data
+library;
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -17,15 +18,14 @@ class SecureStorage {
   final FlutterSecureStorage _storage;
 
   SecureStorage({FlutterSecureStorage? storage})
-      : _storage = storage ??
-            const FlutterSecureStorage(
-              aOptions: AndroidOptions(
-                encryptedSharedPreferences: true,
-              ),
-              iOptions: IOSOptions(
-                accessibility: KeychainAccessibility.first_unlock_this_device,
-              ),
-            );
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            aOptions: AndroidOptions(encryptedSharedPreferences: true),
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+            ),
+          );
 
   // ============== AUTH TOKEN ==============
 

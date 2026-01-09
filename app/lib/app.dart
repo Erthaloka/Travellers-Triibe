@@ -1,6 +1,7 @@
 /// File: app.dart
 /// Purpose: Main app widget with theme and routing setup
 /// Context: Root widget of the application
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
