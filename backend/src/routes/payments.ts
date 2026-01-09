@@ -201,44 +201,50 @@ router.post(
       throw new ApiError(400, 'Missing signature');
     }
 
-    // Verify webhook signature
-    const isValid = verifyWebhookSignature(
-      JSON.stringify(req.body),
-      signature
-    );
+        //  Store raw body ONCE...
+    const rawBody = req.body.toString();
 
+    //  Verify signature first...
+    const isValid = verifyWebhookSignature(rawBody, signature);
     if (!isValid) {
       throw new ApiError(400, 'Invalid webhook signature');
     }
 
-    const { event, payload } = req.body;
+    //  Parse only AFTER verification...
+    const payloadBody = JSON.parse(rawBody);
+    const { event, payload } = payloadBody;
+   
+
 
     switch (event) {
       case 'payment.captured': {
-        const { payment } = payload;
-        const razorpayOrderId = payment.entity.order_id;
+          //   Place it here...
+    const payment = payload.payment.entity;
+    const razorpayOrderId = payment.order_id;
+    const paymentId = payment.id; // for marking completed
 
-        // Find and update order
+        // Find and update order...
         const order = await Order.findOne({ razorpayOrderId });
         if (order && order.status === OrderStatus.PENDING) {
-          await order.markCompleted(
-            payment.entity.id,
-            '' // Webhook doesn't provide signature
-          );
-        }
+            await order.markCompleted(paymentId, ''); // mark order completed
+    }
         break;
       }
+
 
       case 'payment.failed': {
-        const { payment } = payload;
-        const razorpayOrderId = payment.entity.order_id;
+    const payment = payload.payment.entity;
+    const razorpayOrderId = payment.order_id;
+    const  errorDescription = payment.error_description;// optional for failed, if needed
 
-        const order = await Order.findOne({ razorpayOrderId });
-        if (order && order.status === OrderStatus.PENDING) {
-          await order.markFailed(payment.entity.error_description);
-        }
-        break;
-      }
+    const order = await Order.findOne({ razorpayOrderId });
+    if (order && order.status === OrderStatus.PENDING) {
+        await order.markFailed(errorDescription);
+    }
+    break;
+}
+
+
 
       case 'refund.created': {
         const { refund } = payload;
