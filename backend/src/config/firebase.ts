@@ -1,32 +1,49 @@
 /**
  * Firebase Admin SDK configuration
+ * Backend ONLY (Node / Express)
  */
-import admin from 'firebase-admin';
-import { env } from './env.js';
-import path from 'path';
 
-// Initialize Firebase Admin
+import admin from "firebase-admin";
+import path from "path";
+import fs from "fs";
+
+// Initialize Firebase Admin only once
 const initializeFirebase = (): admin.app.App => {
+  // Prevent re-initialization in watch mode
   if (admin.apps.length > 0) {
-    return admin.apps[0]!;
+    return admin.apps[0];
   }
 
-  // Use service account JSON file - resolve from project root
+  // Resolve service account path relative to backend root
   const serviceAccountPath = path.resolve(
     process.cwd(),
-    env.FIREBASE_SERVICE_ACCOUNT_PATH
+    "travellers-triibe-firebase-adminsdk.json"
+  );
+
+  // Ensure file exists
+  if (!fs.existsSync(serviceAccountPath)) {
+    throw new Error(
+      `Firebase service account not found at: ${serviceAccountPath}`
+    );
+  }
+
+  // Load service account
+  const serviceAccount = JSON.parse(
+    fs.readFileSync(serviceAccountPath, "utf-8")
   );
 
   return admin.initializeApp({
-    credential: admin.credential.cert(serviceAccountPath),
+    credential: admin.credential.cert(
+      serviceAccount as admin.ServiceAccount
+    ),
   });
 };
 
-// Initialize on import
+// Initialize immediately on import
 const firebaseApp = initializeFirebase();
 
-// Export Firebase Auth
-export const firebaseAuth: admin.auth.Auth = admin.auth();
+// Export Firebase Auth instance
+export const firebaseAuth = admin.auth();
 
 /**
  * Verify Firebase ID token
@@ -34,12 +51,7 @@ export const firebaseAuth: admin.auth.Auth = admin.auth();
 export const verifyFirebaseToken = async (
   idToken: string
 ): Promise<admin.auth.DecodedIdToken> => {
-  try {
-    const decodedToken = await firebaseAuth.verifyIdToken(idToken);
-    return decodedToken;
-  } catch (error) {
-    throw new Error(`Firebase token verification failed: ${error}`);
-  }
+  return firebaseAuth.verifyIdToken(idToken);
 };
 
 /**
@@ -65,7 +77,7 @@ export const getFirebaseUserByEmail = async (
 };
 
 /**
- * Create custom token for user
+ * Create custom token (optional)
  */
 export const createCustomToken = async (
   uid: string,

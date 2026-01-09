@@ -11,6 +11,7 @@ import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
+import paymentRoutes from './routes/payment.routes.js';
 
 // Initialize Express app
 const app: Express = express();
@@ -46,6 +47,7 @@ app.set('trust proxy', 1);
 
 // API routes
 app.use('/api', routes);
+app.use('/api/payment', paymentRoutes);
 
 // Root endpoint
 app.get('/', (_, res) => {
