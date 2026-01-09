@@ -1,7 +1,6 @@
 /// File: formatters.dart
 /// Purpose: Currency, date, and number formatting utilities
 /// Context: Used throughout the app for consistent display formatting
-library;
 
 import 'package:intl/intl.dart';
 

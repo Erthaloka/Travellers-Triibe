@@ -1,7 +1,6 @@
 /// File: text_normalizer.dart
 /// Purpose: Unicode safety and text normalization
 /// Context: Applied at all text entry points to prevent Unicode issues
-library;
 
 /// Normalizes user-provided text to prevent Unicode issues.
 /// - Removes zero-width characters

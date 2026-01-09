@@ -1,10 +1,9 @@
 /// File: env.dart
 /// Purpose: Environment configuration for different build modes
 /// Context: Used throughout the app for API base URLs and feature flags
-library;
 
 class Env {
-  static const String _devBaseUrl = 'http://10.0.2.2:3000/api';
+  static const String _devBaseUrl = 'http://localhost:3000/api';
   static const String _prodBaseUrl = 'https://api.travellers-triibe.com/api';
 
   /// Current environment mode

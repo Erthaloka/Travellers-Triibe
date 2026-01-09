@@ -16,7 +16,7 @@ class PartnerProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final Account = authProvider.account;
+    final account = authProvider.account;
 
     return Scaffold(
       appBar: AppBar(

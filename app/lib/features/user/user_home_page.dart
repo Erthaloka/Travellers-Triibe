@@ -47,8 +47,7 @@ class _UserHomePageState extends State<UserHomePage> {
         final data = savingsResponse.data!['data'] ?? savingsResponse.data!;
         setState(() {
           _totalSavings = (data['totalSavings'] as num?)?.toInt() ?? 0;
-          _thisMonthSavings =
-              ((data['thisMonth']?['savings'] as num?)?.toInt()) ?? 0;
+          _thisMonthSavings = ((data['thisMonth']?['savings'] as num?)?.toInt()) ?? 0;
           _totalOrders = (data['totalOrders'] as num?)?.toInt() ?? 0;
           _recentOrders = (data['recentSavings'] as List?) ?? [];
         });
@@ -69,42 +68,32 @@ class _UserHomePageState extends State<UserHomePage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Stack(
-          children: [
-            // Main Scrollable Content
-            RefreshIndicator(
-              onRefresh: _loadData,
-              child: CustomScrollView(
-                slivers: [
-                  // App Bar
-                  SliverToBoxAdapter(child: _buildAppBar(context)),
-                  // Content
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate([
-                        const SizedBox(height: 10), // Small gap after app bar
-                        _buildSavingsCard(context),
-                        const SizedBox(height: 24),
-                        _buildQuickActions(context),
-                        const SizedBox(height: 24),
-                        _buildRecentOrdersSection(context),
-                        // Extra space at bottom so button doesn't cover content
-                        const SizedBox(height: 100),
-                      ]),
-                    ),
-                  ),
-                ],
+        child: RefreshIndicator(
+          onRefresh: _loadData,
+          child: CustomScrollView(
+            slivers: [
+              // App Bar
+              SliverToBoxAdapter(
+                child: _buildAppBar(context),
               ),
-            ),
-
-            // Floating Scan & Pay Button in Bottom Right
-            Positioned(
-              bottom: 24,
-              right: 20,
-              child: _buildScanPayButton(context),
-            ),
-          ],
+              // Content
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _buildScanPayButton(context),
+                    const SizedBox(height: 20),
+                    _buildSavingsCard(context),
+                    const SizedBox(height: 24),
+                    _buildQuickActions(context),
+                    const SizedBox(height: 24),
+                    _buildRecentOrdersSection(context),
+                    const SizedBox(height: 24),
+                  ]),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _buildBottomNav(context),
@@ -168,8 +157,8 @@ class _UserHomePageState extends State<UserHomePage> {
                   account?.name.isNotEmpty == true
                       ? account!.name[0].toUpperCase()
                       : account?.email.isNotEmpty == true
-                      ? account!.email[0].toUpperCase()
-                      : 'U',
+                          ? account!.email[0].toUpperCase()
+                          : 'U',
                   style: AppTextStyles.labelLarge.copyWith(
                     color: AppColors.primary,
                     fontWeight: FontWeight.w600,
@@ -190,15 +179,14 @@ class _UserHomePageState extends State<UserHomePage> {
     return 'Good Evening';
   }
 
-  // UPDATED: Changed to a compact floating design for the corner
   Widget _buildScanPayButton(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.4),
-            blurRadius: 15,
+            color: AppColors.primary.withOpacity(0.3),
+            blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
@@ -210,21 +198,35 @@ class _UserHomePageState extends State<UserHomePage> {
           onTap: () => context.go(AppRoutes.scan),
           borderRadius: BorderRadius.circular(20),
           child: Container(
-            padding: const EdgeInsets.all(16),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.qr_code_scanner,
-                  color: Colors.white,
-                  size: 32,
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.qr_code_scanner,
+                    color: Colors.white,
+                    size: 34,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Scan & Pay',
+                  style: AppTextStyles.h2.copyWith(
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Scan & Pay',
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                  'Scan QR code to pay with instant discount',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.white.withOpacity(0.85),
                   ),
                 ),
               ],
@@ -291,16 +293,27 @@ class _UserHomePageState extends State<UserHomePage> {
               Row(
                 children: [
                   Expanded(
-                    child: _buildSavingsItem('Orders', _totalOrders.toString()),
+                    child: _buildSavingsItem(
+                      'Orders',
+                      _totalOrders.toString(),
+                    ),
                   ),
-                  Container(width: 1, height: 44, color: AppColors.border),
+                  Container(
+                    width: 1,
+                    height: 44,
+                    color: AppColors.border,
+                  ),
                   Expanded(
                     child: _buildSavingsItem(
                       'This Month',
                       CurrencyFormatter.format(_thisMonthSavings / 100),
                     ),
                   ),
-                  Container(width: 1, height: 44, color: AppColors.border),
+                  Container(
+                    width: 1,
+                    height: 44,
+                    color: AppColors.border,
+                  ),
                   Expanded(
                     child: _buildSavingsItem(
                       'Lifetime',
@@ -410,7 +423,9 @@ class _UserHomePageState extends State<UserHomePage> {
           children: [
             Text(
               'Recent Orders',
-              style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
+              style: AppTextStyles.h4.copyWith(
+                color: AppColors.textPrimary,
+              ),
             ),
             TextButton(
               onPressed: () => context.go(AppRoutes.userOrders),
@@ -460,7 +475,9 @@ class _UserHomePageState extends State<UserHomePage> {
           const SizedBox(height: 4),
           Text(
             'Scan a QR code to start saving!',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textHint),
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textHint,
+            ),
           ),
         ],
       ),
@@ -472,8 +489,7 @@ class _UserHomePageState extends State<UserHomePage> {
     final businessName = partner?['businessName'] ?? 'Unknown Merchant';
     final category = partner?['category'] ?? 'OTHER';
     final discountAmount = (order['discountAmount'] as num?)?.toDouble() ?? 0;
-    final createdAt =
-        DateTime.tryParse(order['createdAt'] ?? '') ?? DateTime.now();
+    final createdAt = DateTime.tryParse(order['createdAt'] ?? '') ?? DateTime.now();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),

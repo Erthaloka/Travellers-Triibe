@@ -88,33 +88,23 @@ class _LoginPageState extends State<LoginPage> {
 
   void _navigateToHome() {
     final authProvider = context.read<AuthProvider>();
-
-    // Clean the string: remove spaces and make lowercase
-    final role = authProvider.activeRole.name.toLowerCase().trim();
-
-    print("LOGGING IN AS: $role"); // LOOK FOR THIS IN DEBUG CONSOLE
-
-    if (role == 'partner' || role == 'business') {
-      context.go(AppRoutes.partnerDashboard);
-    } else if (role == 'admin') {
-      context.go(AppRoutes.adminDashboard);
-    } else {
-      // This is the "fallback" if the role isn't recognized
-      context.go(AppRoutes.userHome);
+    switch (authProvider.activeRole.name) {
+      case 'partner':
+        context.go(AppRoutes.partnerDashboard);
+        break;
+      case 'admin':
+        context.go(AppRoutes.adminDashboard);
+        break;
+      default:
+        context.go(AppRoutes.userHome);
     }
-  }
-
-  void _skip() {
-    context.go(AppRoutes.userHome);
   }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final isPartner = authProvider.pendingSignupRole == 'partner';
-    final accentColor = isPartner
-        ? AppColors.partnerAccent
-        : AppColors.userAccent;
+    final accentColor = isPartner ? AppColors.partnerAccent : AppColors.userAccent;
 
     return Scaffold(
       appBar: AppBar(
@@ -123,13 +113,6 @@ class _LoginPageState extends State<LoginPage> {
           onPressed: () => context.pop(),
         ),
         title: const Text('Login'),
-        actions: [
-          TextButton(
-            onPressed: _skip,
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
-            child: const Text('Skip'),
-          ),
-        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -205,7 +188,9 @@ class _LoginPageState extends State<LoginPage> {
         const SizedBox(height: 20),
         Text(
           'Welcome Back',
-          style: AppTextStyles.h2.copyWith(color: AppColors.textPrimary),
+          style: AppTextStyles.h2.copyWith(
+            color: AppColors.textPrimary,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
@@ -290,9 +275,7 @@ class _LoginPageState extends State<LoginPage> {
         prefixIcon: const Icon(Icons.lock_outlined),
         suffixIcon: IconButton(
           icon: Icon(
-            _obscurePassword
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
+            _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
           ),
           onPressed: () {
             setState(() {
@@ -313,7 +296,9 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildLoginButton(Color accentColor) {
     return ElevatedButton(
       onPressed: _isLoading ? null : _loginWithEmailPassword,
-      style: ElevatedButton.styleFrom(backgroundColor: accentColor),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: accentColor,
+      ),
       child: _isLoading
           ? const SizedBox(
               height: 20,
@@ -342,7 +327,9 @@ class _LoginPageState extends State<LoginPage> {
           Expanded(
             child: Text(
               _errorMessage!,
-              style: AppTextStyles.bodySmall.copyWith(color: AppColors.error),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.error,
+              ),
             ),
           ),
         ],

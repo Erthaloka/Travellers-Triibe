@@ -52,9 +52,7 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
       }
 
       // Fetch partner analytics/stats
-      final analyticsResponse = await apiClient.get(
-        ApiEndpoints.partnerAnalytics,
-      );
+      final analyticsResponse = await apiClient.get(ApiEndpoints.partnerAnalytics);
       if (analyticsResponse.success && analyticsResponse.data != null) {
         final data = analyticsResponse.data!['data'] ?? analyticsResponse.data!;
         final today = data['today'] ?? {};
@@ -92,39 +90,27 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Stack(
-          children: [
-            // Main Scrollable Content
-            RefreshIndicator(
-              onRefresh: _loadData,
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: _buildAppBar(context)),
-                  SliverPadding(
-                    padding: const EdgeInsets.all(20),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate([
-                        _buildTodayStats(),
-                        const SizedBox(height: 24),
-                        _buildQuickActions(context),
-                        const SizedBox(height: 24),
-                        _buildRecentOrders(context),
-                        // Bottom spacing so floating button doesn't cover last order
-                        const SizedBox(height: 100),
-                      ]),
-                    ),
-                  ),
-                ],
+        child: RefreshIndicator(
+          onRefresh: _loadData,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _buildAppBar(context)),
+              SliverPadding(
+                padding: const EdgeInsets.all(20),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _buildGenerateBillButton(context),
+                    const SizedBox(height: 24),
+                    _buildTodayStats(),
+                    const SizedBox(height: 24),
+                    _buildQuickActions(context),
+                    const SizedBox(height: 24),
+                    _buildRecentOrders(context),
+                  ]),
+                ),
               ),
-            ),
-
-            // Floating Generate Bill Button in Bottom Right
-            Positioned(
-              bottom: 24,
-              right: 20,
-              child: _buildGenerateBillButton(context),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _buildBottomNav(context),
@@ -145,7 +131,11 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
               color: AppColors.partnerAccent,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.store, color: Colors.white, size: 22),
+            child: const Icon(
+              Icons.store,
+              color: Colors.white,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -153,17 +143,13 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _businessName.isNotEmpty
-                      ? _businessName
-                      : 'Partner Dashboard',
+                  _businessName.isNotEmpty ? _businessName : 'Partner Dashboard',
                   style: AppTextStyles.h4.copyWith(
                     color: AppColors.textPrimary,
                   ),
                 ),
                 Text(
-                  _businessName.isNotEmpty
-                      ? 'Partner Dashboard'
-                      : (account?.email ?? 'Business'),
+                  _businessName.isNotEmpty ? 'Partner Dashboard' : (account?.email ?? 'Business'),
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -193,38 +179,67 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
     );
   }
 
-  // Updated: Now formatted as a Floating Action Button for the bottom right
   Widget _buildGenerateBillButton(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             color: AppColors.partnerAccent.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 10),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Material(
         color: AppColors.partnerAccent,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: () => context.go(AppRoutes.generateQr),
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(20),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+            child: Row(
               children: [
-                const Icon(Icons.qr_code, color: Colors.white, size: 32),
-                const SizedBox(height: 10),
-                Text(
-                  'Generate QR',
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
                   ),
+                  child: const Icon(
+                    Icons.qr_code,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Generate Bill',
+                        style: AppTextStyles.h3.copyWith(
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Create QR code for customer payment',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.white.withOpacity(0.85),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  color: Colors.white.withOpacity(0.8),
+                  size: 20,
                 ),
               ],
             ),
@@ -240,7 +255,9 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
       children: [
         Text(
           "Today's Overview",
-          style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
+          style: AppTextStyles.h4.copyWith(
+            color: AppColors.textPrimary,
+          ),
         ),
         const SizedBox(height: 12),
         if (_isLoading)
@@ -321,7 +338,7 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: color, size: 16),
@@ -332,7 +349,9 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
           const SizedBox(height: 12),
           Text(
             value,
-            style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
+            style: AppTextStyles.h3.copyWith(
+              color: AppColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
@@ -352,7 +371,9 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
       children: [
         Text(
           'Quick Actions',
-          style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
+          style: AppTextStyles.h4.copyWith(
+            color: AppColors.textPrimary,
+          ),
         ),
         const SizedBox(height: 12),
         Row(
@@ -429,7 +450,9 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
           children: [
             Text(
               'Recent Orders',
-              style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
+              style: AppTextStyles.h4.copyWith(
+                color: AppColors.textPrimary,
+              ),
             ),
             TextButton(
               onPressed: () => context.go(AppRoutes.partnerOrders),
@@ -448,12 +471,10 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
         else if (_recentOrders.isEmpty)
           _buildEmptyOrders()
         else
-          ..._recentOrders.map(
-            (order) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _buildOrderItem(order),
-            ),
-          ),
+          ..._recentOrders.map((order) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildOrderItem(order),
+          )),
       ],
     );
   }
@@ -484,7 +505,9 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
           const SizedBox(height: 4),
           Text(
             'Generate a QR code to start receiving orders',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textHint),
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textHint,
+            ),
           ),
         ],
       ),
@@ -496,8 +519,7 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
     final originalAmount = (order['originalAmount'] as num?)?.toDouble() ?? 0;
     final discountAmount = (order['discountAmount'] as num?)?.toDouble() ?? 0;
     final status = order['status'] ?? 'PENDING';
-    final createdAt =
-        DateTime.tryParse(order['createdAt'] ?? '') ?? DateTime.now();
+    final createdAt = DateTime.tryParse(order['createdAt'] ?? '') ?? DateTime.now();
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -512,7 +534,7 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: _getStatusColor(status).withOpacity(0.15),
+              color: _getStatusColor(status).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -669,18 +691,14 @@ class _PartnerDashboardPageState extends State<PartnerDashboardPage> {
           children: [
             Icon(
               isActive ? activeIcon : icon,
-              color: isActive
-                  ? AppColors.partnerAccent
-                  : AppColors.textSecondary,
+              color: isActive ? AppColors.partnerAccent : AppColors.textSecondary,
               size: 24,
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 4),
             Text(
               label,
               style: AppTextStyles.labelSmall.copyWith(
-                color: isActive
-                    ? AppColors.partnerAccent
-                    : AppColors.textSecondary,
+                color: isActive ? AppColors.partnerAccent : AppColors.textSecondary,
               ),
             ),
           ],

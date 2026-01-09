@@ -1,7 +1,6 @@
 /// File: auth_provider.dart
 /// Purpose: Authentication state management
 /// Context: Manages user session, roles, and authentication status
-library;
 
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';

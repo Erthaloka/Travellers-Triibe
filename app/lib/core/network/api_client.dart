@@ -1,7 +1,6 @@
 /// File: api_client.dart
 /// Purpose: Single HTTP handler with JWT interceptor
 /// Context: Used by all services for API calls
-library;
 
 import 'dart:convert';
 import 'dart:async';

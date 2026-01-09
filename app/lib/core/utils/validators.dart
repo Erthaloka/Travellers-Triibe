@@ -1,7 +1,6 @@
 /// File: validators.dart
 /// Purpose: Input validation utilities
 /// Context: Used in forms and API requests for data validation
-library;
 
 /// Validation result with error message
 class ValidationResult {
