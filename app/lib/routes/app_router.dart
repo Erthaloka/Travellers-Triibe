@@ -9,6 +9,7 @@ import '../core/theme/app_theme.dart';
 import '../features/auth/welcome_page.dart';
 import '../features/auth/login_page.dart';
 import '../features/auth/signup_page.dart';
+import '../features/auth/complete_profile_page.dart';
 import '../features/user/user_home_page.dart';
 import '../features/user/scan_page.dart';
 import '../features/user/payment_preview_page.dart';
@@ -33,6 +34,7 @@ class AppRoutes {
   static const String login = '/login';
   static const String roleSelection = '/role-selection';
   static const String signup = '/signup';
+  static const String completeProfile = '/complete-profile';
 
   // User routes
   static const String userHome = '/user';
@@ -77,15 +79,12 @@ class AppRouter {
   /// Route redirect logic
   static String? _redirect(AuthProvider auth, GoRouterState state) {
     final isAuthenticated = auth.isAuthenticated;
-    final isLoading = auth.state == AuthState.initial || auth.state == AuthState.loading;
+    final isLoading =
+        auth.state == AuthState.initial || auth.state == AuthState.loading;
     final currentPath = state.matchedLocation;
 
     // Auth flow paths that unauthenticated users can access
-    final authPaths = [
-      AppRoutes.welcome,
-      AppRoutes.login,
-      AppRoutes.signup,
-    ];
+    final authPaths = [AppRoutes.welcome, AppRoutes.login, AppRoutes.signup];
 
     // While loading, stay where you are (don't redirect during active login)
     if (isLoading) {
@@ -106,6 +105,21 @@ class AppRouter {
         return null; // Allow access to auth pages
       }
       return AppRoutes.welcome;
+    }
+
+    // Check if profile is complete (phone number existence)
+    if (!auth.isProfileComplete) {
+      // Allow staying on complete profile page
+      if (currentPath == AppRoutes.completeProfile) {
+        return null;
+      }
+      // Redirect to complete profile page
+      return AppRoutes.completeProfile;
+    } else {
+      // If profile IS complete, but user tries to go back to complete profile manually
+      if (currentPath == AppRoutes.completeProfile) {
+        return _getHomeForRole(auth.activeRole);
+      }
     }
 
     // If authenticated but on splash or auth pages, redirect to home based on role
@@ -171,15 +185,18 @@ class AppRouter {
       },
     ),
 
+    // Complete Profile route
+    GoRoute(
+      path: AppRoutes.completeProfile,
+      builder: (context, state) => const CompleteProfilePage(),
+    ),
+
     // User routes
     GoRoute(
       path: AppRoutes.userHome,
       builder: (context, state) => const UserHomePage(),
       routes: [
-        GoRoute(
-          path: 'scan',
-          builder: (context, state) => const ScanPage(),
-        ),
+        GoRoute(path: 'scan', builder: (context, state) => const ScanPage()),
         GoRoute(
           path: 'payment-preview',
           builder: (context, state) {
@@ -187,9 +204,7 @@ class AppRouter {
             if (extra == null) {
               return const _PlaceholderPage(title: 'Invalid Payment');
             }
-            return PaymentPreviewPage(
-              data: PaymentPreviewData.fromMap(extra),
-            );
+            return PaymentPreviewPage(data: PaymentPreviewData.fromMap(extra));
           },
         ),
         GoRoute(
@@ -199,9 +214,7 @@ class AppRouter {
             if (extra == null) {
               return const _PlaceholderPage(title: 'Invalid Payment');
             }
-            return PaymentSuccessPage(
-              data: PaymentSuccessData.fromMap(extra),
-            );
+            return PaymentSuccessPage(data: PaymentSuccessData.fromMap(extra));
           },
         ),
         GoRoute(
@@ -264,11 +277,13 @@ class AppRouter {
     // Admin routes
     GoRoute(
       path: AppRoutes.adminDashboard,
-      builder: (context, state) => const _PlaceholderPage(title: 'Admin Dashboard'),
+      builder: (context, state) =>
+          const _PlaceholderPage(title: 'Admin Dashboard'),
       routes: [
         GoRoute(
           path: 'merchants',
-          builder: (context, state) => const _PlaceholderPage(title: 'Merchants'),
+          builder: (context, state) =>
+              const _PlaceholderPage(title: 'Merchants'),
         ),
         GoRoute(
           path: 'merchants/:merchantId',
@@ -283,11 +298,13 @@ class AppRouter {
         ),
         GoRoute(
           path: 'orders',
-          builder: (context, state) => const _PlaceholderPage(title: 'All Orders'),
+          builder: (context, state) =>
+              const _PlaceholderPage(title: 'All Orders'),
         ),
         GoRoute(
           path: 'settlements',
-          builder: (context, state) => const _PlaceholderPage(title: 'Settlements'),
+          builder: (context, state) =>
+              const _PlaceholderPage(title: 'Settlements'),
         ),
       ],
     ),
@@ -323,9 +340,7 @@ class _SplashPage extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Travellers Triibe',
-              style: AppTextStyles.h2.copyWith(
-                color: AppColors.textPrimary,
-              ),
+              style: AppTextStyles.h2.copyWith(color: AppColors.textPrimary),
             ),
             const SizedBox(height: 8),
             Text(
@@ -359,9 +374,7 @@ class _PlaceholderPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
+      appBar: AppBar(title: Text(title)),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -374,9 +387,7 @@ class _PlaceholderPage extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               title,
-              style: AppTextStyles.h3.copyWith(
-                color: AppColors.textPrimary,
-              ),
+              style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
             ),
             const SizedBox(height: 8),
             Text(
@@ -430,7 +441,8 @@ class _ErrorPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  error?.toString() ?? 'The page you are looking for does not exist.',
+                  error?.toString() ??
+                      'The page you are looking for does not exist.',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.textSecondary,

@@ -10,6 +10,7 @@ class ApiEndpoints {
   static const String firebaseAuth = '/auth/firebase';
   static const String sendOtp = '/auth/send-otp';
   static const String verifyOtp = '/auth/verify-otp';
+  static const String updateProfile = '/auth/update-profile';
 
   // ============== USER ==============
   static const String userProfile = '/users/profile';
@@ -41,7 +42,8 @@ class ApiEndpoints {
   // ============== ADMIN ==============
   static const String adminDashboard = '/admin/dashboard';
   static const String adminMerchants = '/admin/merchants';
-  static String adminMerchantDetail(String merchantId) => '/admin/merchants/$merchantId';
+  static String adminMerchantDetail(String merchantId) =>
+      '/admin/merchants/$merchantId';
   static const String adminUsers = '/admin/users';
   static const String adminOrders = '/admin/orders';
   static const String adminSettlements = '/admin/settlements';

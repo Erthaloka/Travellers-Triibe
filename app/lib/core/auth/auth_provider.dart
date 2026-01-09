@@ -2,63 +2,18 @@
 /// Purpose: Authentication state management
 /// Context: Manages user session, roles, and authentication status
 
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../config/constants.dart';
 import '../storage/secure_storage.dart';
 import '../network/api_client.dart';
 import '../network/api_endpoints.dart';
-
-/// User account model
-class Account {
-  final String accountId;
-  final String email;
-  final String phone;
-  final String name;
-  final List<UserRole> roles;
-  final AccountStatus status;
-  final int totalSavings;
-  final int totalOrders;
-
-  Account({
-    required this.accountId,
-    required this.email,
-    required this.phone,
-    required this.name,
-    required this.roles,
-    required this.status,
-    this.totalSavings = 0,
-    this.totalOrders = 0,
-  });
-
-  factory Account.fromJson(Map<String, dynamic> json) {
-    final rolesJson = json['roles'] as List<dynamic>? ?? ['USER'];
-    return Account(
-      accountId: json['id'] ?? json['_id'] ?? json['account_id'] ?? '',
-      email: json['email'] ?? '',
-      phone: json['phone'] ?? '',
-      name: json['name'] ?? '',
-      roles: rolesJson.map((r) => UserRole.fromString(r.toString())).toList(),
-      status: AccountStatus.fromString(json['status'] ?? 'ACTIVE'),
-      totalSavings: json['totalSavings'] ?? 0,
-      totalOrders: json['totalOrders'] ?? 0,
-    );
-  }
-
-  bool hasRole(UserRole role) => roles.contains(role);
-  bool get isUser => hasRole(UserRole.user);
-  bool get isPartner => hasRole(UserRole.partner);
-  bool get isAdmin => hasRole(UserRole.admin);
-}
+import '../../features/auth/auth_service.dart';
+import '../../features/auth/models/account.dart';
 
 /// Authentication state
-enum AuthState {
-  initial,
-  loading,
-  authenticated,
-  unauthenticated,
-  error,
-}
+enum AuthState { initial, loading, authenticated, unauthenticated, error }
 
 /// Authentication provider
 class AuthProvider extends ChangeNotifier {
@@ -75,14 +30,12 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider({
     required SecureStorage secureStorage,
     required ApiClient apiClient,
-  })  : _secureStorage = secureStorage,
-        _apiClient = apiClient;
+  }) : _secureStorage = secureStorage,
+       _apiClient = apiClient;
 
   /// Get or initialize GoogleSignIn lazily
   GoogleSignIn _getGoogleSignIn() {
-    _googleSignIn ??= GoogleSignIn(
-      scopes: ['email', 'profile'],
-    );
+    _googleSignIn ??= GoogleSignIn(scopes: ['email', 'profile']);
     return _googleSignIn!;
   }
 
@@ -92,7 +45,8 @@ class AuthProvider extends ChangeNotifier {
   UserRole get activeRole => _activeRole;
   String? get errorMessage => _errorMessage;
   String? get pendingSignupRole => _pendingSignupRole;
-  bool get isAuthenticated => _state == AuthState.authenticated && _account != null;
+  bool get isAuthenticated =>
+      _state == AuthState.authenticated && _account != null;
   bool get isLoading => _state == AuthState.loading;
 
   /// Set pending signup role (called from profile selection)
@@ -116,8 +70,14 @@ class AuthProvider extends ChangeNotifier {
         final response = await _apiClient.get(ApiEndpoints.me);
 
         if (response.success && response.data != null) {
-          final data = response.data!['data'] ?? response.data!;
-          _account = Account.fromJson(data is Map<String, dynamic> ? data : response.data!);
+          // Extract user data from response wrapper
+          final userData = response.data!['data'] ?? response.data!;
+          try {
+            _account = Account.fromJson(userData);
+          } catch (_) {
+            // If parsing fails, try original (just in case logic changes)
+            _account = Account.fromJson(response.data!);
+          }
 
           // Restore last active role
           final lastRole = await _secureStorage.getLastActiveRole();
@@ -130,18 +90,65 @@ class AuthProvider extends ChangeNotifier {
             _activeRole = _account!.roles.first;
           }
 
+          // Cache the fresh account data
+          await _secureStorage.setAccountData(jsonEncode(response.data!));
+
           _state = AuthState.authenticated;
-        } else {
+        } else if (response.statusCode == 401) {
           // Token invalid, clear storage
           await _secureStorage.clearAll();
           _state = AuthState.unauthenticated;
+        } else {
+          // Network error or server error - Try to load from cache
+          final cachedDataStr = await _secureStorage.getAccountData();
+          if (cachedDataStr != null) {
+            try {
+              final cachedData = jsonDecode(cachedDataStr);
+              _account = Account.fromJson(cachedData);
+              // Restore role logic (simplified)
+              final lastRole = await _secureStorage.getLastActiveRole();
+              if (lastRole != null) {
+                _activeRole = UserRole.fromString(lastRole);
+              } else if (_account!.roles.isNotEmpty) {
+                _activeRole = _account!.roles.first;
+              }
+              _state = AuthState.authenticated;
+            } catch (_) {
+              // Cache corrupt
+              _state = AuthState.error;
+              _errorMessage =
+                  'Unable to connect. Please check your internet connection.';
+            }
+          } else {
+            // No cache available
+            _state = AuthState.error;
+            _errorMessage =
+                'Unable to connect. Please check your internet connection.';
+          }
         }
       } else {
         _state = AuthState.unauthenticated;
       }
     } catch (e) {
-      await _secureStorage.clearAll();
-      _state = AuthState.unauthenticated;
+      // Unexpected error - Try to fallback to cache
+      try {
+        final cachedDataStr = await _secureStorage.getAccountData();
+        if (cachedDataStr != null) {
+          final cachedData = jsonDecode(cachedDataStr);
+          _account = Account.fromJson(cachedData);
+          final lastRole = await _secureStorage.getLastActiveRole();
+          if (lastRole != null) {
+            _activeRole = UserRole.fromString(lastRole);
+          } else if (_account!.roles.isNotEmpty) {
+            _activeRole = _account!.roles.first;
+          }
+          _state = AuthState.authenticated;
+        } else {
+          _state = AuthState.unauthenticated;
+        }
+      } catch (_) {
+        _state = AuthState.unauthenticated;
+      }
       _errorMessage = null;
     }
 
@@ -160,10 +167,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       final response = await _apiClient.post(
         ApiEndpoints.login,
-        body: {
-          'email': email,
-          'password': password,
-        },
+        body: {'email': email, 'password': password},
         requiresAuth: false,
       );
 
@@ -220,7 +224,8 @@ class AuthProvider extends ChangeNotifier {
       }
 
       // Get Google auth details
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
       final String? accessToken = googleAuth.accessToken;
 
@@ -232,7 +237,9 @@ class AuthProvider extends ChangeNotifier {
       }
 
       if (kDebugMode) {
-        print('🔵 Google Sign-In: Sending role = ${_pendingSignupRole?.toLowerCase() ?? 'user'}');
+        print(
+          '🔵 Google Sign-In: Sending role = ${_pendingSignupRole?.toLowerCase() ?? 'user'}',
+        );
       }
 
       // Send to backend for verification
@@ -242,7 +249,9 @@ class AuthProvider extends ChangeNotifier {
           'idToken': idToken ?? accessToken,
           'email': googleUser.email,
           'name': googleUser.displayName ?? 'User',
-          'role': _pendingSignupRole?.toLowerCase() ?? 'user', // ✅ CRITICAL: Send role
+          'role':
+              _pendingSignupRole?.toLowerCase() ??
+              'user', // ✅ CRITICAL: Send role
         },
         requiresAuth: false,
       );
@@ -301,8 +310,12 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       if (kDebugMode) {
-        print('🔵 Signup: Sending role = ${_pendingSignupRole?.toLowerCase() ?? 'user'}');
-        print('🔵 Signup payload: name=$name, email=$email, phone=$phone, role=${_pendingSignupRole?.toLowerCase() ?? 'user'}');
+        print(
+          '🔵 Signup: Sending role = ${_pendingSignupRole?.toLowerCase() ?? 'user'}',
+        );
+        print(
+          '🔵 Signup payload: name=$name, email=$email, phone=$phone, role=${_pendingSignupRole?.toLowerCase() ?? 'user'}',
+        );
       }
 
       final response = await _apiClient.post(
@@ -312,7 +325,7 @@ class AuthProvider extends ChangeNotifier {
           'email': email,
           'password': password,
           'phone': phone,
-          'role': _pendingSignupRole?.toLowerCase() ?? 'user', // ✅ CRITICAL FIX: Send role parameter
+          'role': _pendingSignupRole?.toLowerCase() ?? 'user',
         },
         requiresAuth: false,
       );
@@ -329,18 +342,12 @@ class AuthProvider extends ChangeNotifier {
             print('✅ Signup successful! User roles: ${_account!.roles}');
           }
 
-          // ✅ UPDATED: Set active role based on signup selection
+          // Set active role based on signup selection
           final signupRole = UserRole.fromString(_pendingSignupRole ?? 'user');
           if (_account!.hasRole(signupRole)) {
             _activeRole = signupRole;
-            if (kDebugMode) {
-              print('✅ Active role set to: $_activeRole');
-            }
           } else if (_account!.roles.isNotEmpty) {
             _activeRole = _account!.roles.first;
-            if (kDebugMode) {
-              print('⚠️ Signup role not found in account, using first role: $_activeRole');
-            }
           }
 
           await _secureStorage.saveSession(
@@ -349,7 +356,7 @@ class AuthProvider extends ChangeNotifier {
             role: _activeRole.name.toUpperCase(),
           );
 
-          _pendingSignupRole = null; // ✅ Clear after successful signup
+          _pendingSignupRole = null; // Clear after successful signup
           _state = AuthState.authenticated;
           notifyListeners();
           return true;
@@ -395,24 +402,15 @@ class AuthProvider extends ChangeNotifier {
     _activeRole = UserRole.user;
     _state = AuthState.unauthenticated;
     _errorMessage = null;
-    _pendingSignupRole = null; // ✅ Also clear pending role on logout
+    _pendingSignupRole = null;
     notifyListeners();
   }
 
-  /// Add role to current account (used after partner onboarding)
+  /// Add role to current account
   void addRole(UserRole role) {
     if (_account != null && !_account!.roles.contains(role)) {
       final updatedRoles = [..._account!.roles, role];
-      _account = Account(
-        accountId: _account!.accountId,
-        email: _account!.email,
-        phone: _account!.phone,
-        name: _account!.name,
-        roles: updatedRoles,
-        status: _account!.status,
-        totalSavings: _account!.totalSavings,
-        totalOrders: _account!.totalOrders,
-      );
+      _account = _account!.copyWith(roles: updatedRoles);
       notifyListeners();
     }
   }
@@ -431,5 +429,62 @@ class AuthProvider extends ChangeNotifier {
   /// Get available roles for switching
   List<UserRole> get availableRoles {
     return _account?.roles ?? [];
+  }
+
+  /// Check if profile is complete (has phone number)
+  bool get isProfileComplete {
+    return _account?.phone != null && _account!.phone.isNotEmpty;
+  }
+
+  /// Update user profile
+  Future<bool> updateProfile({
+    required String name,
+    required String phone,
+    String? avatar,
+  }) async {
+    _state = AuthState.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final authService = AuthService(apiClient: _apiClient);
+      final result = await authService.updateProfile(
+        name: name,
+        phone: phone,
+        avatar: avatar,
+      );
+
+      if (result.success && result.data != null) {
+        _account = result.data;
+        _state = AuthState.authenticated;
+        notifyListeners();
+        return true;
+      }
+
+      _state = AuthState.error;
+      _errorMessage = result.errorMessage ?? 'Failed to update profile';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _state = AuthState.error;
+      _errorMessage = 'Update failed: ${e.toString()}';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Save profile draft
+  Future<void> saveProfileDraft(String name, String phone) async {
+    await _secureStorage.saveProfileDraft(name, phone);
+  }
+
+  /// Get profile draft
+  Future<Map<String, String?>> getProfileDraft() async {
+    return await _secureStorage.getProfileDraft();
+  }
+
+  /// Clear profile draft
+  Future<void> clearProfileDraft() async {
+    await _secureStorage.clearProfileDraft();
   }
 }

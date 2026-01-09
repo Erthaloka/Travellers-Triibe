@@ -144,17 +144,46 @@ router.post(
  */
 async function verifyGoogleAccessToken(accessToken: string): Promise<{ email: string; name?: string; picture?: string } | null> {
   try {
+    console.log('Verifying as Google Access Token...');
     const response = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (!response.ok) return null;
-    const data = await response.json();
+    if (!response.ok) {
+      console.log('Google Access Token verification failed:', response.status, await response.text());
+      return null;
+    }
+    const data = await response.json() as any;
     return {
       email: data.email,
       name: data.name,
       picture: data.picture,
     };
-  } catch {
+  } catch (error) {
+    console.log('Google Access Token flow error:', error);
+    return null;
+  }
+}
+
+/**
+ * Verify Google ID Token using tokeninfo endpoint
+ */
+async function verifyGoogleIdToken(idToken: string): Promise<{ email: string; name?: string; picture?: string; sub: string } | null> {
+  try {
+    console.log('Verifying as Google ID Token...');
+    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+    if (!response.ok) {
+      console.log('Google ID Token verification failed:', response.status, await response.text());
+      return null;
+    }
+    const data = await response.json() as any;
+    return {
+      email: data.email,
+      name: data.name,
+      picture: data.picture,
+      sub: data.sub
+    };
+  } catch (error) {
+    console.log('Google ID Token flow error:', error);
     return null;
   }
 }
@@ -169,6 +198,9 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { idToken, email: providedEmail, name: providedName, role } = req.body;
 
+    console.log('Received auth request. Token length:', idToken?.length);
+    console.log('Provided email/name:', providedEmail, providedName);
+
     let email: string | undefined;
     let name: string | undefined;
     let picture: string | undefined;
@@ -177,25 +209,35 @@ router.post(
     // Try Firebase ID token first
     try {
       const decodedToken = await verifyFirebaseToken(idToken);
+      console.log('Firebase verification successful');
       uid = decodedToken.uid;
       email = decodedToken.email;
       name = decodedToken.name;
       picture = decodedToken.picture;
-    } catch {
-      // Firebase verification failed, try as Google access token
-      const googleUser = await verifyGoogleAccessToken(idToken);
-      if (googleUser) {
-        email = googleUser.email;
-        name = googleUser.name;
-        picture = googleUser.picture;
-        uid = `google_${email}`; // Generate a pseudo-UID for Google-only auth
-      } else if (providedEmail) {
-        // Fallback to provided email/name (for web where we can't verify)
-        email = providedEmail;
-        name = providedName;
-        uid = `web_${email}`;
+    } catch (firebaseError) {
+      console.log('Firebase v/erification failed:', firebaseError);
+
+      // Try as Google ID Token (standard Google Sign In)
+      const googleIdUser = await verifyGoogleIdToken(idToken);
+      if (googleIdUser) {
+        console.log('Google ID Token verification successful');
+        email = googleIdUser.email;
+        name = googleIdUser.name;
+        picture = googleIdUser.picture;
+        uid = `google_${googleIdUser.sub}`;
       } else {
-        throw new ApiError(401, 'Invalid authentication token');
+        // Fallback: Try as Google Access Token
+        const googleUser = await verifyGoogleAccessToken(idToken);
+        if (googleUser) {
+          console.log('Google Access Token verification successful');
+          email = googleUser.email;
+          name = googleUser.name;
+          picture = googleUser.picture;
+          uid = `google_${email}`; // Generate a pseudo-UID for Google-only auth
+        } else {
+          console.log('All verification methods failed');
+          throw new ApiError(401, 'Invalid authentication token');
+        }
       }
     }
 
@@ -216,13 +258,17 @@ router.post(
 
       user = await User.create({
         email: email.toLowerCase(),
-        phone: `+91${Math.floor(9000000000 + Math.random() * 999999999)}`, // Temp phone
         name: name || email.split('@')[0],
         supabaseId: uid,
         roles,
         status: AccountStatus.ACTIVE,
         avatar: picture,
       });
+    }
+
+    // If user exists, try to update avatar from Google if missing
+    if (!isNewUser && picture && !user.avatar) {
+      user.avatar = picture;
     }
 
     // Update last login
@@ -313,20 +359,25 @@ router.get(
 );
 
 /**
- * PUT /api/auth/update-phone
- * Update phone number (required after social login)
+ * PUT /api/auth/update-profile
+ * Update profile details (Name & Phone) - User completes profile
  */
 router.put(
-  '/update-phone',
+  '/update-profile',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
-    const { phone } = req.body;
+    const { name, phone, avatar } = req.body;
+
+    // Validate inputs
+    if (!name || name.trim().length < 2) {
+      throw new ApiError(400, 'Name must be at least 2 characters');
+    }
 
     if (!phone || !/^\+91[6-9]\d{9}$/.test(phone)) {
       throw new ApiError(400, 'Valid Indian phone number required');
     }
 
-    // Check if phone is already in use
+    // Check if phone is already in use by ANOTHER user
     const existing = await User.findOne({
       phone,
       _id: { $ne: req.user!._id },
@@ -336,7 +387,10 @@ router.put(
       throw new ApiError(409, 'Phone number already in use');
     }
 
+    // Update user
+    req.user!.name = name.trim();
     req.user!.phone = phone;
+    if (avatar) req.user!.avatar = avatar; // Update avatar if provided
     await req.user!.save();
 
     res.json({

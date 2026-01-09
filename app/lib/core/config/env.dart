@@ -2,8 +2,20 @@
 /// Purpose: Environment configuration for different build modes
 /// Context: Used throughout the app for API base URLs and feature flags
 
+import 'package:flutter/foundation.dart';
+
 class Env {
-  static const String _devBaseUrl = 'http://10.0.2.2:3000/api';
+  // Use localhost for Web, 10.0.2.2 for Android Emulator, and localhost for iOS Simulator
+  static String get _devBaseUrl {
+    if (kIsWeb) {
+      return 'http://localhost:3000/api';
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:3000/api';
+    } else {
+      return 'http://localhost:3000/api';
+    }
+  }
+
   static const String _prodBaseUrl = 'https://api.travellers-triibe.com/api';
 
   /// Current environment mode

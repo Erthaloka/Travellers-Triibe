@@ -38,6 +38,7 @@ export interface IUser extends Document {
   // Supabase integration
   supabaseId?: string;
   googleId?: string;
+  accountId: string;
 
   // Timestamps
   createdAt: Date;
@@ -62,10 +63,11 @@ const userSchema = new Schema<IUser>(
     },
     phone: {
       type: String,
-      required: true,
+      required: false,
       unique: true,
       trim: true,
       index: true,
+      sparse: true,
     },
     name: {
       type: String,
@@ -104,6 +106,11 @@ const userSchema = new Schema<IUser>(
       type: String,
       sparse: true,
     },
+    accountId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     lastLoginAt: Date,
   },
   {
@@ -123,6 +130,17 @@ const userSchema = new Schema<IUser>(
 // Indexes
 userSchema.index({ email: 1, status: 1 });
 userSchema.index({ phone: 1, status: 1 });
+userSchema.index({ accountId: 1 });
+
+// Generate Account ID before save
+userSchema.pre('save', async function (next) {
+  if (!this.accountId) {
+    // Generate a shorter, readable ID (e.g. TT-12345678)
+    const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase();
+    this.accountId = `TT-${randomPart}`;
+  }
+  next();
+});
 
 // Methods
 userSchema.methods.hasRole = function (role: UserRole): boolean {

@@ -19,10 +19,7 @@ class AuthService {
   }) async {
     final response = await _apiClient.post(
       ApiEndpoints.sendOtp,
-      body: {
-        'email': normalizeEmail(email),
-        'phone': normalizePhone(phone),
-      },
+      body: {'email': normalizeEmail(email), 'phone': normalizePhone(phone)},
       requiresAuth: false,
     );
 
@@ -61,9 +58,7 @@ class AuthService {
       }
     }
 
-    return LoginResult.failure(
-      response.error?.message ?? 'Login failed',
-    );
+    return LoginResult.failure(response.error?.message ?? 'Login failed');
   }
 
   /// Get current authenticated user
@@ -91,10 +86,7 @@ class AuthService {
   }) async {
     final response = await _apiClient.post(
       ApiEndpoints.verifyOtp,
-      body: {
-        'phone': normalizePhone(phone),
-        'otp': otp.trim(),
-      },
+      body: {'phone': normalizePhone(phone), 'otp': otp.trim()},
       requiresAuth: false,
     );
 
@@ -107,6 +99,40 @@ class AuthService {
       message: response.error?.message ?? 'OTP verification failed',
     );
   }
+
+  /// Update user profile (Name & Phone)
+  Future<AccountResult> updateProfile({
+    required String name,
+    required String phone,
+    String? avatar,
+  }) async {
+    final body = {'name': name.trim(), 'phone': normalizePhone(phone)};
+
+    if (avatar != null) {
+      body['avatar'] = avatar;
+    }
+
+    final response = await _apiClient.put(
+      ApiEndpoints.updateProfile,
+      body: body,
+      requiresAuth: true,
+    );
+
+    if (response.success && response.data != null) {
+      try {
+        final account = Account.fromJson(
+          response.data!['data'] ?? response.data!,
+        );
+        return AccountResult.success(account);
+      } catch (e) {
+        return AccountResult.failure('Invalid account data');
+      }
+    }
+
+    return AccountResult.failure(
+      response.error?.message ?? 'Failed to update profile',
+    );
+  }
 }
 
 /// Result wrapper for login operation
@@ -115,11 +141,7 @@ class LoginResult {
   final LoginResponse? data;
   final String? errorMessage;
 
-  LoginResult._({
-    required this.success,
-    this.data,
-    this.errorMessage,
-  });
+  LoginResult._({required this.success, this.data, this.errorMessage});
 
   factory LoginResult.success(LoginResponse data) {
     return LoginResult._(success: true, data: data);
@@ -136,11 +158,7 @@ class AccountResult {
   final Account? data;
   final String? errorMessage;
 
-  AccountResult._({
-    required this.success,
-    this.data,
-    this.errorMessage,
-  });
+  AccountResult._({required this.success, this.data, this.errorMessage});
 
   factory AccountResult.success(Account data) {
     return AccountResult._(success: true, data: data);

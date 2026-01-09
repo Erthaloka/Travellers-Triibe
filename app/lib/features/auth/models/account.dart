@@ -8,6 +8,8 @@ class Account {
   final String accountId;
   final String email;
   final String phone;
+  final String name;
+  final String? profilePicture; // Added
   final bool phoneVerified;
   final bool emailVerified;
   final List<UserRole> roles;
@@ -19,6 +21,8 @@ class Account {
     required this.accountId,
     required this.email,
     required this.phone,
+    required this.name,
+    this.profilePicture, // Added
     this.phoneVerified = false,
     this.emailVerified = false,
     required this.roles,
@@ -31,9 +35,14 @@ class Account {
   factory Account.fromJson(Map<String, dynamic> json) {
     final rolesJson = json['roles'] as List<dynamic>? ?? ['USER'];
     return Account(
-      accountId: json['account_id'] ?? json['_id'] ?? '',
+      accountId: json['accountId'] ?? json['account_id'] ?? json['_id'] ?? '',
       email: json['email'] ?? '',
       phone: json['phone'] ?? '',
+      name: json['name'] ?? '',
+      profilePicture:
+          json['profilePicture'] ??
+          json['avatar'] ??
+          json['profile_picture'], // Added mapping
       phoneVerified: json['phone_verified'] ?? false,
       emailVerified: json['email_verified'] ?? false,
       roles: rolesJson.map((r) => UserRole.fromString(r.toString())).toList(),
@@ -53,6 +62,8 @@ class Account {
       'account_id': accountId,
       'email': email,
       'phone': phone,
+      'name': name,
+      'avatar': profilePicture, // Added
       'phone_verified': phoneVerified,
       'email_verified': emailVerified,
       'roles': roles.map((r) => r.name.toUpperCase()).toList(),
@@ -78,6 +89,8 @@ class Account {
     String? accountId,
     String? email,
     String? phone,
+    String? name,
+    String? profilePicture, // Added
     bool? phoneVerified,
     bool? emailVerified,
     List<UserRole>? roles,
@@ -89,6 +102,8 @@ class Account {
       accountId: accountId ?? this.accountId,
       email: email ?? this.email,
       phone: phone ?? this.phone,
+      name: name ?? this.name,
+      profilePicture: profilePicture ?? this.profilePicture, // Added
       phoneVerified: phoneVerified ?? this.phoneVerified,
       emailVerified: emailVerified ?? this.emailVerified,
       roles: roles ?? this.roles,
@@ -131,11 +146,7 @@ class OtpResponse {
   final String message;
   final int? expiresIn; // seconds
 
-  OtpResponse({
-    required this.success,
-    required this.message,
-    this.expiresIn,
-  });
+  OtpResponse({required this.success, required this.message, this.expiresIn});
 
   factory OtpResponse.fromJson(Map<String, dynamic> json) {
     return OtpResponse(

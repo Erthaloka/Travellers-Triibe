@@ -10,6 +10,9 @@ class StorageKeys {
   static const String refreshToken = 'refresh_token';
   static const String lastActiveRole = 'last_active_role';
   static const String accountId = 'account_id';
+  static const String accountData = 'account_data';
+  static const String draftName = 'draft_name';
+  static const String draftPhone = 'draft_phone';
 }
 
 /// Secure storage wrapper
@@ -17,15 +20,14 @@ class SecureStorage {
   final FlutterSecureStorage _storage;
 
   SecureStorage({FlutterSecureStorage? storage})
-      : _storage = storage ??
-            const FlutterSecureStorage(
-              aOptions: AndroidOptions(
-                encryptedSharedPreferences: true,
-              ),
-              iOptions: IOSOptions(
-                accessibility: KeychainAccessibility.first_unlock_this_device,
-              ),
-            );
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            aOptions: AndroidOptions(encryptedSharedPreferences: true),
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+            ),
+          );
 
   // ============== AUTH TOKEN ==============
 
@@ -101,6 +103,48 @@ class SecureStorage {
     await _storage.delete(key: StorageKeys.accountId);
   }
 
+  // ============== ACCOUNT DATA CACHE ==============
+
+  /// Get cached account data
+  Future<String?> getAccountData() async {
+    return await _storage.read(key: StorageKeys.accountData);
+  }
+
+  /// Cache account data (JSON string)
+  Future<void> setAccountData(String jsonString) async {
+    await _storage.write(key: StorageKeys.accountData, value: jsonString);
+  }
+
+  /// Delete cached account data
+  Future<void> deleteAccountData() async {
+    await _storage.delete(key: StorageKeys.accountData);
+  }
+
+  // ============== PROFILE DRAFTS ==============
+
+  /// Save profile draft
+  Future<void> saveProfileDraft(String name, String phone) async {
+    await Future.wait([
+      _storage.write(key: StorageKeys.draftName, value: name),
+      _storage.write(key: StorageKeys.draftPhone, value: phone),
+    ]);
+  }
+
+  /// Get profile draft
+  Future<Map<String, String?>> getProfileDraft() async {
+    final name = await _storage.read(key: StorageKeys.draftName);
+    final phone = await _storage.read(key: StorageKeys.draftPhone);
+    return {'name': name, 'phone': phone};
+  }
+
+  /// Clear profile draft
+  Future<void> clearProfileDraft() async {
+    await Future.wait([
+      _storage.delete(key: StorageKeys.draftName),
+      _storage.delete(key: StorageKeys.draftPhone),
+    ]);
+  }
+
   // ============== SESSION MANAGEMENT ==============
 
   /// Clear all auth data (logout)
@@ -110,6 +154,8 @@ class SecureStorage {
       deleteRefreshToken(),
       deleteLastActiveRole(),
       deleteAccountId(),
+      deleteAccountData(),
+      clearProfileDraft(),
     ]);
   }
 
