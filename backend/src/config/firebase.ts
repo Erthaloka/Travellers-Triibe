@@ -11,21 +11,27 @@ import fs from "fs";
 const initializeFirebase = (): admin.app.App => {
   // Prevent re-initialization in watch mode
   if (admin.apps.length > 0) {
-    return admin.apps[0];
+    return admin.apps[0] as admin.app.App;
   }
 
   // Resolve service account path relative to backend root
-  const serviceAccountPath = path.resolve(
-    process.cwd(),
-    "travellers-triibe-firebase-adminsdk.json"
+  // Look for any file matching the pattern pattern
+  const rootDir = process.cwd();
+  const files = fs.readdirSync(rootDir);
+  const serviceAccountFile = files.find(file =>
+    file.startsWith('travellers-triibe-firebase-adminsdk-') &&
+    file.endsWith('.json')
   );
 
-  // Ensure file exists
-  if (!fs.existsSync(serviceAccountPath)) {
+  if (!serviceAccountFile) {
     throw new Error(
-      `Firebase service account not found at: ${serviceAccountPath}`
+      `Firebase service account not found in ${rootDir}. Expected file starting with 'travellers-triibe-firebase-adminsdk-'`
     );
   }
+
+  const serviceAccountPath = path.resolve(rootDir, serviceAccountFile);
+
+  console.log(`✅ Loaded Firebase Service Account: ${serviceAccountFile}`);
 
   // Load service account
   const serviceAccount = JSON.parse(
@@ -43,7 +49,7 @@ const initializeFirebase = (): admin.app.App => {
 const firebaseApp = initializeFirebase();
 
 // Export Firebase Auth instance
-export const firebaseAuth = admin.auth();
+export const firebaseAuth: admin.auth.Auth = admin.auth();
 
 /**
  * Verify Firebase ID token

@@ -21,6 +21,11 @@ const app: Express = express();
 // Security headers
 app.use(helmet());
 
+// Rate Limiting
+import { globalLimiter } from './middleware/rateLimiter.js';
+app.use('/api', globalLimiter);
+
+
 // CORS
 app.use(
   cors({

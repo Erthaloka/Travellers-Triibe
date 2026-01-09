@@ -9,6 +9,7 @@ import { validateBody } from '../middleware/validate.js';
 import { authenticate, generateToken } from '../middleware/auth.js';
 import { User, UserRole, AccountStatus } from '../models/index.js';
 import { verifyFirebaseToken } from '../config/firebase.js';
+import { authLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -42,6 +43,7 @@ const firebaseAuthSchema = z.object({
  */
 router.post(
   '/signup',
+  authLimiter,
   validateBody(signupSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { name, email, password, phone, role } = req.body;
@@ -95,6 +97,7 @@ router.post(
  */
 router.post(
   '/login',
+  authLimiter,
   validateBody(loginSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = req.body;
@@ -194,6 +197,7 @@ async function verifyGoogleIdToken(idToken: string): Promise<{ email: string; na
  */
 router.post(
   '/firebase',
+  authLimiter,
   validateBody(firebaseAuthSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { idToken, email: providedEmail, name: providedName, role } = req.body;
@@ -295,6 +299,7 @@ router.post(
  */
 router.post(
   '/google',
+  authLimiter,
   validateBody(firebaseAuthSchema),
   asyncHandler(async (req: Request, res: Response) => {
     // Forward to Firebase auth handler
