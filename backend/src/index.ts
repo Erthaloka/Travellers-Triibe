@@ -11,7 +11,7 @@ import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
-import healthRouter from './routes/health.ts';
+import healthRouter from './routes/health';
 
 // ============== App Initialization ==============
 // Initialize Express app
