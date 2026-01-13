@@ -1,5 +1,5 @@
 /**
- * Firebase Admin SDK configuration
+ * Firebase Admin SDK configuration-firebase.ts
  */
 import admin from 'firebase-admin';
 import { env } from './env.js';
@@ -12,22 +12,41 @@ const initializeFirebase = (): admin.app.App => {
     return admin.apps[0]!;
   }
 
-  // Use service account JSON file - resolve from project root
-  const serviceAccountPath = path.resolve(
-    process.cwd(),
-    env.FIREBASE_SERVICE_ACCOUNT_PATH
-  );
+  try {
+    // Option 1: PRODUCTION - Use JSON from environment variable
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      console.log('🔥 Firebase: Initializing from environment variable');
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      return admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+    }
 
-  // Ensure file exists and provide a clear error if not
-  if (!fs.existsSync(serviceAccountPath)) {
-    console.error(`Firebase service account file not found at: ${serviceAccountPath}`);
-    console.error('Download a service account JSON from Firebase Console and set FIREBASE_SERVICE_ACCOUNT_PATH in your .env');
+    // Option 2: DEVELOPMENT - Use file path (your current method)
+    if (env.FIREBASE_SERVICE_ACCOUNT_PATH) {
+      const serviceAccountPath = path.resolve(
+        process.cwd(),
+        env.FIREBASE_SERVICE_ACCOUNT_PATH
+      );
+
+      if (!fs.existsSync(serviceAccountPath)) {
+        console.error(`Firebase service account file not found at: ${serviceAccountPath}`);
+        console.error('Download a service account JSON from Firebase Console and set FIREBASE_SERVICE_ACCOUNT_PATH in your .env');
+        process.exit(1);
+      }
+
+      console.log('🔥 Firebase: Initializing from file path');
+      return admin.initializeApp({
+        credential: admin.credential.cert(serviceAccountPath),
+      });
+    }
+
+    throw new Error('No Firebase configuration found. Set either FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH');
+
+  } catch (error) {
+    console.error('❌ Firebase initialization failed:', error);
     process.exit(1);
   }
-
-  return admin.initializeApp({
-    credential: admin.credential.cert(serviceAccountPath),
-  });
 };
 
 // Initialize on import

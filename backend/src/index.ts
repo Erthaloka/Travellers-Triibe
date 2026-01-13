@@ -11,6 +11,10 @@ import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
+import healthRouter from './routes/health.ts';
+
+// ============== App Initialization ==============
+// Initialize Express app
 
 // Initialize Express app
 const app: Express = express();
@@ -46,7 +50,7 @@ app.use(
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
+app.use('/api', healthRouter);
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
 
