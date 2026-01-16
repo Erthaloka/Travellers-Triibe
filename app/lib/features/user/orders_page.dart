@@ -1,35 +1,17 @@
-/// User orders page - order history with filtering
+/// User orders page - order history with filtering - orders_page.dart
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/network/api_client.dart';
+import '../../core/network/api_endpoints.dart';
 import '../../routes/app_router.dart';
 
 /// Order category filter
-enum OrderCategory { all, food, stay, service, retail }
-
-/// Mock order model for demo
-class MockOrder {
-  final String orderId;
-  final String merchantName;
-  final String category;
-  final double amountPaid;
-  final double discountAmount;
-  final DateTime date;
-  final String status;
-
-  MockOrder({
-    required this.orderId,
-    required this.merchantName,
-    required this.category,
-    required this.amountPaid,
-    required this.discountAmount,
-    required this.date,
-    required this.status,
-  });
-}
+enum OrderCategory { all, restaurant, hotel, salon, retail }
 
 /// User orders page
 class UserOrdersPage extends StatefulWidget {
@@ -41,44 +23,50 @@ class UserOrdersPage extends StatefulWidget {
 
 class _UserOrdersPageState extends State<UserOrdersPage> {
   OrderCategory _selectedCategory = OrderCategory.all;
+  bool _isLoading = true;
+  List<dynamic> _orders = [];
 
-  // Mock orders for demo
-  final List<MockOrder> _mockOrders = [
-    MockOrder(
-      orderId: 'ORD001',
-      merchantName: 'Spice Garden Restaurant',
-      category: 'FOOD',
-      amountPaid: 940,
-      discountAmount: 60,
-      date: DateTime.now().subtract(const Duration(hours: 2)),
-      status: 'COMPLETED',
-    ),
-    MockOrder(
-      orderId: 'ORD002',
-      merchantName: 'Hotel Sunrise',
-      category: 'STAY',
-      amountPaid: 4700,
-      discountAmount: 300,
-      date: DateTime.now().subtract(const Duration(days: 1)),
-      status: 'COMPLETED',
-    ),
-    MockOrder(
-      orderId: 'ORD003',
-      merchantName: 'City Spa & Wellness',
-      category: 'SERVICE',
-      amountPaid: 1880,
-      discountAmount: 120,
-      date: DateTime.now().subtract(const Duration(days: 3)),
-      status: 'COMPLETED',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadOrders();
+  }
 
-  List<MockOrder> get _filteredOrders {
-    if (_selectedCategory == OrderCategory.all) return _mockOrders;
-    return _mockOrders
-        .where((o) =>
-            o.category.toLowerCase() == _selectedCategory.name.toLowerCase())
-        .toList();
+  Future<void> _loadOrders() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final apiClient = context.read<ApiClient>();
+      final response = await apiClient.get(ApiEndpoints.orders);
+
+      if (response.success && response.data != null) {
+        final data = response.data!['data'] ?? response.data!;
+        setState(() {
+          _orders = (data['orders'] as List?) ?? [];
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load orders: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  List<dynamic> get _filteredOrders {
+    if (_selectedCategory == OrderCategory.all) return _orders;
+
+    final categoryFilter = _selectedCategory.name.toUpperCase();
+    return _orders.where((order) {
+      final partner = order['partnerId'];
+      final category = (partner?['category'] as String?)?.toUpperCase() ?? '';
+      return category == categoryFilter;
+    }).toList();
   }
 
   @override
@@ -96,7 +84,9 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
         children: [
           _buildCategoryFilter(),
           Expanded(
-            child: _filteredOrders.isEmpty
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredOrders.isEmpty
                 ? _buildEmptyState()
                 : _buildOrdersList(),
           ),
@@ -141,25 +131,35 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
   }
 
   Widget _buildOrdersList() {
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _filteredOrders.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final order = _filteredOrders[index];
-        return _buildOrderCard(order);
-      },
+    return RefreshIndicator(
+      onRefresh: _loadOrders,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _filteredOrders.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final order = _filteredOrders[index];
+          return _buildOrderCard(order);
+        },
+      ),
     );
   }
 
-  Widget _buildOrderCard(MockOrder order) {
+  Widget _buildOrderCard(Map<String, dynamic> order) {
+    final orderId = order['orderId'] ?? order['id'] ?? 'Unknown';
+    final partner = order['partnerId'];
+    final merchantName = partner?['businessName'] ?? 'Unknown Merchant';
+    final category = partner?['category'] ?? 'OTHER';
+    final finalAmount = (order['finalAmount'] as num?)?.toDouble() ?? 0;
+    final discountAmount = (order['discountAmount'] as num?)?.toDouble() ?? 0;
+    final createdAt = DateTime.tryParse(order['createdAt'] ?? '') ?? DateTime.now();
+
     return Material(
       color: AppColors.cardBackground,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () {
-          // Navigate to order detail
-          context.go('/user/orders/${order.orderId}');
+          context.go('/user/orders/$orderId');
         },
         borderRadius: BorderRadius.circular(12),
         child: Container(
@@ -181,7 +181,7 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      _getCategoryIcon(order.category),
+                      _getCategoryIcon(category),
                       color: AppColors.primary,
                       size: 22,
                     ),
@@ -192,7 +192,7 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          order.merchantName,
+                          merchantName,
                           style: AppTextStyles.bodyLarge.copyWith(
                             color: AppColors.textPrimary,
                             fontWeight: FontWeight.w600,
@@ -200,7 +200,7 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          DateTimeFormatter.formatRelative(order.date),
+                          DateTimeFormatter.formatRelative(createdAt),
                           style: AppTextStyles.bodySmall.copyWith(
                             color: AppColors.textSecondary,
                           ),
@@ -212,7 +212,7 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        CurrencyFormatter.format(order.amountPaid),
+                        CurrencyFormatter.format(finalAmount / 100),
                         style: AppTextStyles.bodyLarge.copyWith(
                           color: AppColors.textPrimary,
                           fontWeight: FontWeight.w600,
@@ -229,7 +229,7 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          'Saved ${CurrencyFormatter.format(order.discountAmount)}',
+                          'Saved ${CurrencyFormatter.format(discountAmount / 100)}',
                           style: AppTextStyles.labelSmall.copyWith(
                             color: AppColors.success,
                           ),
@@ -285,12 +285,12 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
     switch (category) {
       case OrderCategory.all:
         return 'All';
-      case OrderCategory.food:
+      case OrderCategory.restaurant:
         return 'Food';
-      case OrderCategory.stay:
-        return 'Stay';
-      case OrderCategory.service:
-        return 'Service';
+      case OrderCategory.hotel:
+        return 'Hotel';
+      case OrderCategory.salon:
+        return 'Services';
       case OrderCategory.retail:
         return 'Retail';
     }
@@ -298,10 +298,15 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
 
   IconData _getCategoryIcon(String category) {
     switch (category.toUpperCase()) {
+      case 'RESTAURANT':
+      case 'CAFE':
       case 'FOOD':
         return Icons.restaurant;
+      case 'HOTEL':
       case 'STAY':
         return Icons.hotel;
+      case 'SALON':
+      case 'GYM':
       case 'SERVICE':
         return Icons.miscellaneous_services;
       case 'RETAIL':

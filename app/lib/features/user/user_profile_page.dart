@@ -1,4 +1,4 @@
-/// User profile page with account info and settings
+/// User profile page with account info and settings - user_profile_page.dart
 library;
 
 import 'package:flutter/material.dart';

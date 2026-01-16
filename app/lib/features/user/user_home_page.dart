@@ -1,4 +1,4 @@
-/// User home page with Scan & Pay, savings summary, and recent merchants
+/// User home page with Scan & Pay, savings summary, and recent merchants - user_home_page.dart
 library;
 
 import 'package:flutter/material.dart';

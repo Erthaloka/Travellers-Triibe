@@ -4,8 +4,12 @@
 library;
 
 class Env {
-  static const String _devBaseUrl = 'http://192.168.29.94:3000/api';
-  static const String _prodBaseUrl = 'https://api.travellers-triibe.com/api';
+  // ============================================
+  // UPDATED: Both dev and prod now use Railway
+  // This fixes the login issue by connecting to your live backend
+  // ============================================
+  static const String _devBaseUrl = 'https://travellers-triibe.up.railway.app/api';
+  static const String _prodBaseUrl = 'https://travellers-triibe.up.railway.app/api';
 
   /// Current environment mode
   static const bool isProduction = bool.fromEnvironment('dart.vm.product');
@@ -19,9 +23,9 @@ class Env {
   /// Cache TTL in minutes
   static const int cacheTtlMinutes = 15;
 
-  /// Razorpay Key (set from environment)
+  /// Razorpay Key - Using live key for production
   static const String razorpayKey = String.fromEnvironment(
     'RAZORPAY_KEY',
-    defaultValue: 'rzp_test_RxUlvgLoEpLdKy',
+    defaultValue: 'rzp_live_S2xrN47XnQ6fWv',
   );
 }

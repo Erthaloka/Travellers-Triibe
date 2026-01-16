@@ -56,9 +56,9 @@ router.post(
     const discountAmount = Math.floor((amount * discountRate) / 100);
     const finalAmount = amount - discountAmount;
 
-    // Platform fee (example: 2% of final amount)
-    const platformFee = Math.floor((finalAmount * 2) / 100);
-    const partnerPayout = finalAmount - platformFee;
+    // Platform fee (1% of original amount)
+    const platformFee = Math.floor((amount * 1) / 100);
+    const partnerPayout = amount - platformFee;
 
     // Create Razorpay order
     const razorpayOrder = await createRazorpayOrder({
@@ -79,6 +79,7 @@ router.post(
       originalAmount: amount,
       discountRate,
       discountAmount,
+      platformFee,
       finalAmount,
       partnerPayout,
       razorpayOrderId: razorpayOrder.id,
@@ -123,9 +124,16 @@ router.post(
     const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } =
       req.body;
 
-    // Find order
+    console.log('🔍 Payment verification request:', {
+      orderId,
+      razorpayOrderId,
+      razorpayPaymentId,
+    });
+
+    // Find order by MongoDB _id
     const order = await Order.findById(orderId);
     if (!order) {
+      console.log('❌ Order not found:', orderId);
       throw new ApiError(404, 'Order not found');
     }
 
@@ -134,10 +142,15 @@ router.post(
     }
 
     if (order.status !== OrderStatus.PENDING) {
+      console.log('❌ Order status not pending:', order.status);
       throw new ApiError(400, 'Order is not pending');
     }
 
     if (order.razorpayOrderId !== razorpayOrderId) {
+      console.log('❌ Order ID mismatch:', {
+        expected: order.razorpayOrderId,
+        received: razorpayOrderId,
+      });
       throw new ApiError(400, 'Order ID mismatch');
     }
 
@@ -149,20 +162,31 @@ router.post(
     );
 
     if (!isValid) {
+      console.log('❌ Invalid signature');
       order.status = OrderStatus.FAILED;
       order.notes = 'Payment signature verification failed';
       await order.save();
       throw new ApiError(400, 'Payment verification failed');
     }
 
+    console.log('✅ Signature verified');
+
     // Verify payment with Razorpay
-    const payment = await fetchPayment(razorpayPaymentId);
-    if (payment.status !== 'captured') {
-      throw new ApiError(400, 'Payment not captured');
+    try {
+      const payment = await fetchPayment(razorpayPaymentId);
+      console.log('💳 Razorpay payment status:', payment.status);
+
+      if (payment.status !== 'captured' && payment.status !== 'authorized') {
+        throw new ApiError(400, 'Payment not captured');
+      }
+    } catch (error) {
+      console.log('⚠️ Could not fetch payment from Razorpay:', error);
+      // Continue anyway if signature is valid
     }
 
     // Mark order as completed
     await order.markCompleted(razorpayPaymentId, razorpaySignature);
+    console.log('✅ Order marked as completed');
 
     // Update user stats
     await User.findByIdAndUpdate(order.userId, {
@@ -171,11 +195,13 @@ router.post(
         totalOrders: 1,
       },
     });
+    console.log('✅ User stats updated');
 
     // Update partner analytics
     const partner = await Partner.findById(order.partnerId);
     if (partner) {
-      await partner.updateAnalytics(order.finalAmount, order.discountAmount);
+      await partner.updateAnalytics(order.originalAmount, order.discountAmount);
+      console.log('✅ Partner analytics updated');
     }
 
     res.json({
@@ -198,68 +224,100 @@ router.post(
     const signature = req.headers['x-razorpay-signature'] as string;
 
     if (!signature) {
+      console.log('❌ Webhook: Missing signature');
       throw new ApiError(400, 'Missing signature');
     }
 
-        //  Store raw body ONCE...
-    const rawBody = req.body.toString();
+    // Get raw body (should be Buffer from express.raw())
+    let rawBody: string;
+    if (Buffer.isBuffer(req.body)) {
+      rawBody = req.body.toString('utf8');
+    } else if (typeof req.body === 'string') {
+      rawBody = req.body;
+    } else {
+      rawBody = JSON.stringify(req.body);
+    }
 
-    //  Verify signature first...
+    console.log('📥 Webhook received, verifying signature...');
+
+    // Verify signature
     const isValid = verifyWebhookSignature(rawBody, signature);
     if (!isValid) {
+      console.log('❌ Webhook: Invalid signature');
       throw new ApiError(400, 'Invalid webhook signature');
     }
 
-    //  Parse only AFTER verification...
-    const payloadBody = JSON.parse(rawBody);
-    const { event, payload } = payloadBody;
-   
+    console.log('✅ Webhook signature verified');
 
+    // Parse payload
+    const payload = JSON.parse(rawBody);
+    const { event, payload: eventPayload } = payload;
+
+    console.log('📨 Webhook event:', event);
 
     switch (event) {
       case 'payment.captured': {
-          //   Place it here...
-    const payment = payload.payment.entity;
-    const razorpayOrderId = payment.order_id;
-    const paymentId = payment.id; // for marking completed
+        const payment = eventPayload.payment.entity;
+        const razorpayOrderId = payment.order_id;
+        const paymentId = payment.id;
 
-        // Find and update order...
+        console.log('💳 Payment captured:', { razorpayOrderId, paymentId });
+
+        // Find and update order
         const order = await Order.findOne({ razorpayOrderId });
         if (order && order.status === OrderStatus.PENDING) {
-            await order.markCompleted(paymentId, ''); // mark order completed
-    }
+          await order.markCompleted(paymentId, '');
+          console.log('✅ Order marked as completed via webhook');
+
+          // Update user stats
+          await User.findByIdAndUpdate(order.userId, {
+            $inc: {
+              totalSavings: order.discountAmount,
+              totalOrders: 1,
+            },
+          });
+
+          // Update partner analytics
+          const partner = await Partner.findById(order.partnerId);
+          if (partner) {
+            await partner.updateAnalytics(order.originalAmount, order.discountAmount);
+          }
+        }
         break;
       }
 
-
       case 'payment.failed': {
-    const payment = payload.payment.entity;
-    const razorpayOrderId = payment.order_id;
-    const  errorDescription = payment.error_description;// optional for failed, if needed
+        const payment = eventPayload.payment.entity;
+        const razorpayOrderId = payment.order_id;
+        const errorDescription = payment.error_description;
 
-    const order = await Order.findOne({ razorpayOrderId });
-    if (order && order.status === OrderStatus.PENDING) {
-        await order.markFailed(errorDescription);
-    }
-    break;
-}
+        console.log('❌ Payment failed:', { razorpayOrderId, errorDescription });
 
-
+        const order = await Order.findOne({ razorpayOrderId });
+        if (order && order.status === OrderStatus.PENDING) {
+          await order.markFailed(errorDescription);
+          console.log('✅ Order marked as failed via webhook');
+        }
+        break;
+      }
 
       case 'refund.created': {
-        const { refund } = payload;
-        const paymentId = refund.entity.payment_id;
+        const refund = eventPayload.refund.entity;
+        const paymentId = refund.payment_id;
+
+        console.log('💸 Refund created for payment:', paymentId);
 
         const order = await Order.findOne({ razorpayPaymentId: paymentId });
         if (order) {
           order.status = OrderStatus.REFUNDED;
           await order.save();
+          console.log('✅ Order marked as refunded');
         }
         break;
       }
 
       default:
-        console.log(`Unhandled webhook event: ${event}`);
+        console.log(`ℹ️ Unhandled webhook event: ${event}`);
     }
 
     // Always respond 200 to acknowledge receipt

@@ -1,71 +1,91 @@
-/// User Order Detail Page - Shows complete order information
+/// User Order Detail Page - Shows complete order information - order_detail_page.dart
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
-
-/// Order detail data model
-class OrderDetail {
-  final String orderId;
-  final String merchantName;
-  final String merchantCategory;
-  final String merchantAddress;
-  final double billAmount;
-  final double discountPercent;
-  final double discountAmount;
-  final double amountPaid;
-  final DateTime createdAt;
-  final DateTime? paidAt;
-  final String status;
-  final String paymentMethod;
-  final String? transactionId;
-
-  OrderDetail({
-    required this.orderId,
-    required this.merchantName,
-    required this.merchantCategory,
-    required this.merchantAddress,
-    required this.billAmount,
-    required this.discountPercent,
-    required this.discountAmount,
-    required this.amountPaid,
-    required this.createdAt,
-    this.paidAt,
-    required this.status,
-    required this.paymentMethod,
-    this.transactionId,
-  });
-}
+import '../../core/network/api_client.dart';
+import '../../core/network/api_endpoints.dart';
 
 /// User Order Detail Page
-class UserOrderDetailPage extends StatelessWidget {
+class UserOrderDetailPage extends StatefulWidget {
   final String orderId;
 
   const UserOrderDetailPage({super.key, required this.orderId});
 
-  // Mock data for demo
-  OrderDetail get _mockOrder => OrderDetail(
-        orderId: orderId,
-        merchantName: 'Spice Garden Restaurant',
-        merchantCategory: 'FOOD',
-        merchantAddress: 'Shop 12, MG Road, Mumbai 400001',
-        billAmount: 1000.00,
-        discountPercent: 6,
-        discountAmount: 60.00,
-        amountPaid: 940.00,
-        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-        paidAt: DateTime.now().subtract(const Duration(hours: 2)),
-        status: 'COMPLETED',
-        paymentMethod: 'UPI',
-        transactionId: 'pay_NxYz123456789',
+  @override
+  State<UserOrderDetailPage> createState() => _UserOrderDetailPageState();
+}
+
+class _UserOrderDetailPageState extends State<UserOrderDetailPage> {
+  bool _isLoading = true;
+  Map<String, dynamic>? _orderData;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOrderDetails();
+  }
+
+  Future<void> _loadOrderDetails() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final apiClient = context.read<ApiClient>();
+      final response = await apiClient.get(
+        '${ApiEndpoints.orders}/${widget.orderId}',
       );
+
+      if (response.success && response.data != null) {
+        setState(() {
+          _orderData = response.data!['data'] ?? response.data!;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load order: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final order = _mockOrder;
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.pop(),
+          ),
+          title: const Text('Order Details'),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_orderData == null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.pop(),
+          ),
+          title: const Text('Order Details'),
+        ),
+        body: const Center(child: Text('Order not found')),
+      );
+    }
+
+    final order = _orderData!;
 
     return Scaffold(
       appBar: AppBar(
@@ -105,10 +125,12 @@ class UserOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusHeader(OrderDetail order) {
-    final isCompleted = order.status == 'COMPLETED';
+  Widget _buildStatusHeader(Map<String, dynamic> order) {
+    final status = order['status'] ?? 'PENDING';
+    final isCompleted = status == 'COMPLETED';
     final statusColor = isCompleted ? AppColors.success : AppColors.warning;
     final statusBgColor = isCompleted ? AppColors.successLight : AppColors.warningLight;
+    final createdAt = DateTime.tryParse(order['createdAt'] ?? '') ?? DateTime.now();
 
     return Container(
       width: double.infinity,
@@ -139,7 +161,7 @@ class UserOrderDetailPage extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            DateTimeFormatter.formatDateTime(order.createdAt),
+            DateTimeFormatter.formatDateTime(createdAt),
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -149,7 +171,13 @@ class UserOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildMerchantCard(OrderDetail order) {
+  Widget _buildMerchantCard(Map<String, dynamic> order) {
+    final partner = order['partnerId'];
+    final businessName = partner?['businessName'] ?? 'Unknown Merchant';
+    final category = partner?['category'] ?? 'OTHER';
+    final address = partner?['address'];
+    final city = address?['city'] ?? '';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -167,7 +195,7 @@ class UserOrderDetailPage extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              _getCategoryIcon(order.merchantCategory),
+              _getCategoryIcon(category),
               color: AppColors.primary,
               size: 26,
             ),
@@ -178,14 +206,14 @@ class UserOrderDetailPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  order.merchantName,
+                  businessName,
                   style: AppTextStyles.bodyLarge.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  order.merchantAddress,
+                  city,
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -200,7 +228,12 @@ class UserOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildAmountBreakdown(OrderDetail order) {
+  Widget _buildAmountBreakdown(Map<String, dynamic> order) {
+    final originalAmount = (order['originalAmount'] as num?)?.toDouble() ?? 0;
+    final discountRate = (order['discountRate'] as num?)?.toDouble() ?? 0;
+    final discountAmount = (order['discountAmount'] as num?)?.toDouble() ?? 0;
+    final finalAmount = (order['finalAmount'] as num?)?.toDouble() ?? 0;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -218,11 +251,11 @@ class UserOrderDetailPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _buildAmountRow('Bill Amount', CurrencyFormatter.format(order.billAmount)),
+          _buildAmountRow('Bill Amount', CurrencyFormatter.format(originalAmount / 100)),
           const SizedBox(height: 12),
           _buildAmountRow(
-            'Discount (${order.discountPercent.toInt()}%)',
-            '- ${CurrencyFormatter.format(order.discountAmount)}',
+            'Discount (${discountRate.toInt()}%)',
+            '- ${CurrencyFormatter.format(discountAmount / 100)}',
             valueColor: AppColors.success,
           ),
           const Padding(
@@ -231,7 +264,7 @@ class UserOrderDetailPage extends StatelessWidget {
           ),
           _buildAmountRow(
             'Amount Paid',
-            CurrencyFormatter.format(order.amountPaid),
+            CurrencyFormatter.format(finalAmount / 100),
             isTotal: true,
           ),
           const SizedBox(height: 16),
@@ -252,7 +285,7 @@ class UserOrderDetailPage extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'You saved ${CurrencyFormatter.format(order.discountAmount)}!',
+                  'You saved ${CurrencyFormatter.format(discountAmount / 100)}!',
                   style: AppTextStyles.labelLarge.copyWith(
                     color: AppColors.savingsGreen,
                     fontWeight: FontWeight.w600,
@@ -267,11 +300,11 @@ class UserOrderDetailPage extends StatelessWidget {
   }
 
   Widget _buildAmountRow(
-    String label,
-    String value, {
-    Color? valueColor,
-    bool isTotal = false,
-  }) {
+      String label,
+      String value, {
+        Color? valueColor,
+        bool isTotal = false,
+      }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -291,7 +324,14 @@ class UserOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildTransactionDetails(OrderDetail order) {
+  Widget _buildTransactionDetails(Map<String, dynamic> order) {
+    final orderId = order['orderId'] ?? widget.orderId;
+    final paymentMethod = order['paymentMethod'] ?? 'UPI';
+    final razorpayPaymentId = order['razorpayPaymentId'];
+    final completedAt = order['completedAt'] != null
+        ? DateTime.tryParse(order['completedAt'])
+        : null;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -312,21 +352,21 @@ class UserOrderDetailPage extends StatelessWidget {
           _buildDetailRow(
             Icons.receipt_outlined,
             'Order ID',
-            order.orderId,
+            orderId,
             canCopy: true,
           ),
           const SizedBox(height: 14),
           _buildDetailRow(
             Icons.payment_outlined,
             'Payment Method',
-            order.paymentMethod,
+            paymentMethod,
           ),
-          if (order.transactionId != null) ...[
+          if (razorpayPaymentId != null) ...[
             const SizedBox(height: 14),
             _buildDetailRow(
               Icons.tag_outlined,
               'Transaction ID',
-              order.transactionId!,
+              razorpayPaymentId,
               canCopy: true,
             ),
           ],
@@ -334,8 +374,8 @@ class UserOrderDetailPage extends StatelessWidget {
           _buildDetailRow(
             Icons.access_time,
             'Paid At',
-            order.paidAt != null
-                ? DateTimeFormatter.formatDateTime(order.paidAt!)
+            completedAt != null
+                ? DateTimeFormatter.formatDateTime(completedAt)
                 : '-',
           ),
         ],
@@ -344,11 +384,11 @@ class UserOrderDetailPage extends StatelessWidget {
   }
 
   Widget _buildDetailRow(
-    IconData icon,
-    String label,
-    String value, {
-    bool canCopy = false,
-  }) {
+      IconData icon,
+      String label,
+      String value, {
+        bool canCopy = false,
+      }) {
     return Row(
       children: [
         Icon(icon, size: 20, color: AppColors.textSecondary),
@@ -373,22 +413,20 @@ class UserOrderDetailPage extends StatelessWidget {
                     ),
                   ),
                   if (canCopy)
-                    Builder(
-                      builder: (context) => GestureDetector(
-                        onTap: () {
-                          Clipboard.setData(ClipboardData(text: value));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('$label copied'),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-                        },
-                        child: Icon(
-                          Icons.copy_outlined,
-                          size: 16,
-                          color: AppColors.textHint,
-                        ),
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: value));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('$label copied'),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: Icon(
+                        Icons.copy_outlined,
+                        size: 16,
+                        color: AppColors.textHint,
                       ),
                     ),
                 ],
@@ -400,7 +438,7 @@ class UserOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildActions(BuildContext context, OrderDetail order) {
+  Widget _buildActions(BuildContext context, Map<String, dynamic> order) {
     return Column(
       children: [
         SizedBox(
@@ -433,10 +471,15 @@ class UserOrderDetailPage extends StatelessWidget {
 
   IconData _getCategoryIcon(String category) {
     switch (category.toUpperCase()) {
+      case 'RESTAURANT':
+      case 'CAFE':
       case 'FOOD':
         return Icons.restaurant_outlined;
+      case 'HOTEL':
       case 'STAY':
         return Icons.hotel_outlined;
+      case 'SALON':
+      case 'GYM':
       case 'SERVICE':
         return Icons.build_outlined;
       case 'RETAIL':
@@ -446,22 +489,19 @@ class UserOrderDetailPage extends StatelessWidget {
     }
   }
 
-  void _shareOrder(BuildContext context, OrderDetail order) {
-    // TODO: Implement share functionality
+  void _shareOrder(BuildContext context, Map<String, dynamic> order) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Share feature coming soon')),
     );
   }
 
-  void _downloadReceipt(BuildContext context, OrderDetail order) {
-    // TODO: Implement download functionality
+  void _downloadReceipt(BuildContext context, Map<String, dynamic> order) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Receipt download coming soon')),
     );
   }
 
-  void _reportIssue(BuildContext context, OrderDetail order) {
-    // TODO: Implement report functionality
+  void _reportIssue(BuildContext context, Map<String, dynamic> order) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Support feature coming soon')),
     );

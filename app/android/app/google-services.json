@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "575967435374-acfgusn1pq8e5t7n7lstjek2nl91bg09.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.travellers_triibe.travellers_triibe",
+            "certificate_hash": "4198d5d38f79e008b5ec37abea07c8880420232a"
+          }
+        },
+        {
           "client_id": "575967435374-ik74dk4rv5k0pqt7vvv1qq8u1ll050qv.apps.googleusercontent.com",
           "client_type": 3
         }

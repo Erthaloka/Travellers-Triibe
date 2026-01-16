@@ -1,6 +1,6 @@
 /**
  * Travellers Triibe Backend
- * Express + TypeScript API Server
+ * Express + TypeScript API Server-index.ts
  */
 import express, { Express } from 'express';
 import cors from 'cors';
@@ -11,7 +11,7 @@ import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
-import healthRouter from './routes/health';
+import healthRouter from './routes/health.js';
 
 // ============== App Initialization ==============
 // Initialize Express app

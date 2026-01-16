@@ -1,4 +1,4 @@
-/// QR Scanner page for scanning merchant payment QR codes
+/// QR Scanner page for scanning merchant payment QR codes - scan_page.dart
 library;
 
 import 'package:flutter/material.dart';

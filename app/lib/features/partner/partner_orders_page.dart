@@ -1,36 +1,14 @@
-/// Partner orders page - order history for merchant
+/// Partner orders page - order history for merchant - partner_orders_page.dart
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/network/api_client.dart';
+import '../../core/network/api_endpoints.dart';
 import '../../routes/app_router.dart';
-
-/// Mock partner order model
-class PartnerOrder {
-  final String orderId;
-  final String userPhone;
-  final double billAmount;
-  final double discountAmount;
-  final double platformFee;
-  final double netReceivable;
-  final DateTime date;
-  final String status;
-  final String settlementMode;
-
-  PartnerOrder({
-    required this.orderId,
-    required this.userPhone,
-    required this.billAmount,
-    required this.discountAmount,
-    required this.platformFee,
-    required this.netReceivable,
-    required this.date,
-    required this.status,
-    required this.settlementMode,
-  });
-}
 
 /// Partner orders page
 class PartnerOrdersPage extends StatefulWidget {
@@ -42,71 +20,48 @@ class PartnerOrdersPage extends StatefulWidget {
 
 class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
   String _selectedFilter = 'all';
+  bool _isLoading = true;
+  List<dynamic> _orders = [];
 
-  // Mock orders for demo
-  final List<PartnerOrder> _mockOrders = [
-    PartnerOrder(
-      orderId: 'ORD-001',
-      userPhone: '+91****3210',
-      billAmount: 1000,
-      discountAmount: 60,
-      platformFee: 9.40,
-      netReceivable: 930.60,
-      date: DateTime.now().subtract(const Duration(minutes: 10)),
-      status: 'COMPLETED',
-      settlementMode: 'PLATFORM',
-    ),
-    PartnerOrder(
-      orderId: 'ORD-002',
-      userPhone: '+91****5678',
-      billAmount: 2000,
-      discountAmount: 120,
-      platformFee: 18.80,
-      netReceivable: 1861.20,
-      date: DateTime.now().subtract(const Duration(minutes: 25)),
-      status: 'COMPLETED',
-      settlementMode: 'PLATFORM',
-    ),
-    PartnerOrder(
-      orderId: 'ORD-003',
-      userPhone: '+91****9012',
-      billAmount: 500,
-      discountAmount: 30,
-      platformFee: 4.70,
-      netReceivable: 465.30,
-      date: DateTime.now().subtract(const Duration(hours: 1)),
-      status: 'COMPLETED',
-      settlementMode: 'PLATFORM',
-    ),
-    PartnerOrder(
-      orderId: 'ORD-004',
-      userPhone: '+91****3456',
-      billAmount: 1500,
-      discountAmount: 90,
-      platformFee: 14.10,
-      netReceivable: 1395.90,
-      date: DateTime.now().subtract(const Duration(hours: 3)),
-      status: 'SETTLED',
-      settlementMode: 'PLATFORM',
-    ),
-    PartnerOrder(
-      orderId: 'ORD-005',
-      userPhone: '+91****7890',
-      billAmount: 3000,
-      discountAmount: 180,
-      platformFee: 28.20,
-      netReceivable: 2791.80,
-      date: DateTime.now().subtract(const Duration(days: 1)),
-      status: 'SETTLED',
-      settlementMode: 'PLATFORM',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadOrders();
+  }
 
-  List<PartnerOrder> get _filteredOrders {
-    if (_selectedFilter == 'all') return _mockOrders;
-    return _mockOrders
-        .where((o) => o.status.toLowerCase() == _selectedFilter.toLowerCase())
-        .toList();
+  Future<void> _loadOrders() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final apiClient = context.read<ApiClient>();
+      final queryParams = <String, String>{};
+
+      if (_selectedFilter != 'all') {
+        queryParams['status'] = _selectedFilter.toUpperCase();
+      }
+
+      final response = await apiClient.get(
+        ApiEndpoints.partnerOrders,
+        queryParams: queryParams,
+      );
+
+      if (response.success && response.data != null) {
+        final data = response.data!['data'] ?? response.data!;
+        setState(() {
+          _orders = (data['orders'] as List?) ?? [];
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load orders: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -125,7 +80,9 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
           _buildFilterChips(),
           _buildSummaryBar(),
           Expanded(
-            child: _filteredOrders.isEmpty
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _orders.isEmpty
                 ? _buildEmptyState()
                 : _buildOrdersList(),
           ),
@@ -143,9 +100,9 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
           children: [
             _buildFilterChip('all', 'All'),
             const SizedBox(width: 8),
-            _buildFilterChip('completed', 'Pending'),
+            _buildFilterChip('pending', 'Pending'),
             const SizedBox(width: 8),
-            _buildFilterChip('settled', 'Settled'),
+            _buildFilterChip('completed', 'Completed'),
           ],
         ),
       ),
@@ -161,6 +118,7 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
         setState(() {
           _selectedFilter = value;
         });
+        _loadOrders();
       },
       backgroundColor: AppColors.surfaceVariant,
       selectedColor: AppColors.partnerAccent.withValues(alpha: 0.2),
@@ -175,10 +133,10 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
   }
 
   Widget _buildSummaryBar() {
-    final totalOrders = _filteredOrders.length;
-    final totalAmount = _filteredOrders.fold<double>(
+    final totalOrders = _orders.length;
+    final totalAmount = _orders.fold<double>(
       0,
-      (sum, order) => sum + order.netReceivable,
+          (sum, order) => sum + ((order['partnerPayout'] as num?)?.toDouble() ?? 0),
     );
 
     return Container(
@@ -211,7 +169,7 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
             ),
           ),
           Text(
-            CurrencyFormatter.format(totalAmount),
+            CurrencyFormatter.format(totalAmount / 100),
             style: AppTextStyles.h3.copyWith(
               color: AppColors.success,
             ),
@@ -222,27 +180,37 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
   }
 
   Widget _buildOrdersList() {
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _filteredOrders.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final order = _filteredOrders[index];
-        return _buildOrderCard(order);
-      },
+    return RefreshIndicator(
+      onRefresh: _loadOrders,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _orders.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final order = _orders[index];
+          return _buildOrderCard(order);
+        },
+      ),
     );
   }
 
-  Widget _buildOrderCard(PartnerOrder order) {
-    final isSettled = order.status == 'SETTLED';
+  Widget _buildOrderCard(Map<String, dynamic> order) {
+    final status = order['status'] ?? 'PENDING';
+    final isCompleted = status == 'COMPLETED';
+    final orderId = order['orderId'] ?? order['id'] ?? 'Unknown';
+    final user = order['userId'];
+    final userPhone = user?['phone'] ?? 'Unknown';
+    final originalAmount = (order['originalAmount'] as num?)?.toDouble() ?? 0;
+    final discountAmount = (order['discountAmount'] as num?)?.toDouble() ?? 0;
+    final partnerPayout = (order['partnerPayout'] as num?)?.toDouble() ?? 0;
+    final createdAt = DateTime.tryParse(order['createdAt'] ?? '') ?? DateTime.now();
 
     return Material(
       color: AppColors.cardBackground,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () {
-          // Navigate to order detail
-          context.go('/partner/orders/${order.orderId}');
+          context.go('/partner/orders/$orderId');
         },
         borderRadius: BorderRadius.circular(12),
         child: Container(
@@ -259,13 +227,13 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: (isSettled ? AppColors.success : AppColors.warning)
+                      color: (isCompleted ? AppColors.success : AppColors.warning)
                           .withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      isSettled ? Icons.check_circle : Icons.schedule,
-                      color: isSettled ? AppColors.success : AppColors.warning,
+                      isCompleted ? Icons.check_circle : Icons.schedule,
+                      color: isCompleted ? AppColors.success : AppColors.warning,
                       size: 22,
                     ),
                   ),
@@ -277,7 +245,7 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
                         Row(
                           children: [
                             Text(
-                              order.orderId,
+                              orderId,
                               style: AppTextStyles.bodyLarge.copyWith(
                                 color: AppColors.textPrimary,
                                 fontWeight: FontWeight.w600,
@@ -290,16 +258,16 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: (isSettled
-                                        ? AppColors.success
-                                        : AppColors.warning)
+                                color: (isCompleted
+                                    ? AppColors.success
+                                    : AppColors.warning)
                                     .withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                isSettled ? 'Settled' : 'Pending',
+                                isCompleted ? 'Completed' : 'Pending',
                                 style: AppTextStyles.labelSmall.copyWith(
-                                  color: isSettled
+                                  color: isCompleted
                                       ? AppColors.success
                                       : AppColors.warning,
                                 ),
@@ -309,7 +277,7 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${order.userPhone} • ${DateTimeFormatter.formatRelative(order.date)}',
+                          '$userPhone • ${DateTimeFormatter.formatRelative(createdAt)}',
                           style: AppTextStyles.bodySmall.copyWith(
                             color: AppColors.textSecondary,
                           ),
@@ -324,15 +292,15 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  _buildOrderStat('Bill', CurrencyFormatter.format(order.billAmount)),
+                  _buildOrderStat('Bill', CurrencyFormatter.format(originalAmount / 100)),
                   _buildOrderStat(
                     'Discount',
-                    '-${CurrencyFormatter.format(order.discountAmount)}',
+                    '-${CurrencyFormatter.format(discountAmount / 100)}',
                     color: AppColors.warning,
                   ),
                   _buildOrderStat(
                     'Net',
-                    CurrencyFormatter.format(order.netReceivable),
+                    CurrencyFormatter.format(partnerPayout / 100),
                     color: AppColors.success,
                   ),
                 ],
