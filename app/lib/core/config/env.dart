@@ -4,7 +4,7 @@
 library;
 
 class Env {
-  static const String _devBaseUrl = 'http://192.168.29.94:3000/api';
+  static const String _devBaseUrl = 'http://10.0.2.2:3000/api';
   static const String _prodBaseUrl = 'https://api.travellers-triibe.com/api';
 
   /// Current environment mode

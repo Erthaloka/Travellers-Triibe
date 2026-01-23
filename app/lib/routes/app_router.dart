@@ -1,4 +1,4 @@
-/// App routing configuration with role-based guards-app_router.dart
+/// App routing configuration with role-based guards - app_router.dart
 library;
 
 import 'package:flutter/material.dart';
@@ -24,6 +24,8 @@ import '../features/partner/partner_orders_page.dart';
 import '../features/partner/partner_order_detail_page.dart';
 import '../features/partner/partner_analytics_page.dart';
 import '../features/partner/partner_profile_page.dart';
+import '../features/user/about.dart';
+import '../features/user/user_notification.dart';
 
 /// Route paths
 class AppRoutes {
@@ -31,7 +33,6 @@ class AppRoutes {
   static const String splash = '/';
   static const String welcome = '/welcome';
   static const String login = '/login';
-  static const String roleSelection = '/role-selection';
   static const String signup = '/signup';
 
   // User routes
@@ -43,6 +44,9 @@ class AppRoutes {
   static const String userOrderDetail = '/user/orders/:orderId';
   static const String userProfile = '/user/profile';
   static const String userSavings = '/user/savings';
+  static const String about = '/about';
+  static const String notification =
+      '/user/notification'; // Fixed variable name
 
   // Partner routes
   static const String partnerOnboarding = '/partner/onboarding';
@@ -55,11 +59,6 @@ class AppRoutes {
 
   // Admin routes
   static const String adminDashboard = '/admin';
-  static const String adminMerchants = '/admin/merchants';
-  static const String adminMerchantDetail = '/admin/merchants/:merchantId';
-  static const String adminUsers = '/admin/users';
-  static const String adminOrders = '/admin/orders';
-  static const String adminSettlements = '/admin/settlements';
 }
 
 /// App router configuration
@@ -74,62 +73,37 @@ class AppRouter {
     );
   }
 
-  /// Route redirect logic
   static String? _redirect(AuthProvider auth, GoRouterState state) {
     final isAuthenticated = auth.isAuthenticated;
-    final isLoading = auth.state == AuthState.initial || auth.state == AuthState.loading;
+    final isLoading =
+        auth.state == AuthState.initial || auth.state == AuthState.loading;
     final currentPath = state.matchedLocation;
+    final authPaths = [AppRoutes.welcome, AppRoutes.login, AppRoutes.signup];
 
-    // Auth flow paths that unauthenticated users can access
-    final authPaths = [
-      AppRoutes.welcome,
-      AppRoutes.login,
-      AppRoutes.signup,
-    ];
-
-    // While loading, stay where you are (don't redirect during active login)
     if (isLoading) {
-      // If on auth pages, stay there (user is actively logging in)
-      if (authPaths.contains(currentPath)) {
-        return null;
-      }
-      // Otherwise, go to splash to wait for auth check
-      return currentPath == AppRoutes.splash ? null : AppRoutes.splash;
+      return authPaths.contains(currentPath) ? null : AppRoutes.splash;
     }
 
-    // If not authenticated, redirect to welcome (unless already on auth flow)
     if (!isAuthenticated) {
-      if (currentPath == AppRoutes.splash) {
+      if (currentPath == AppRoutes.splash || !authPaths.contains(currentPath)) {
         return AppRoutes.welcome;
       }
-      if (authPaths.contains(currentPath)) {
-        return null; // Allow access to auth pages
-      }
-      return AppRoutes.welcome;
+      return null;
     }
 
-    // If authenticated but on splash or auth pages, redirect to home based on role
     if (currentPath == AppRoutes.splash || authPaths.contains(currentPath)) {
       return _getHomeForRole(auth.activeRole);
     }
 
-    // Role-based access control
     if (currentPath.startsWith('/partner') && !auth.hasRole(UserRole.partner)) {
-      // User trying to access partner routes without partner role
-      if (currentPath == AppRoutes.partnerOnboarding) {
-        return null; // Allow onboarding
-      }
-      return AppRoutes.userHome;
-    }
-
-    if (currentPath.startsWith('/admin') && !auth.hasRole(UserRole.admin)) {
-      return _getHomeForRole(auth.activeRole);
+      return currentPath == AppRoutes.partnerOnboarding
+          ? null
+          : AppRoutes.userHome;
     }
 
     return null;
   }
 
-  /// Get home route for role
   static String _getHomeForRole(UserRole role) {
     switch (role) {
       case UserRole.admin:
@@ -141,54 +115,43 @@ class AppRouter {
     }
   }
 
-  /// Route definitions
   static final List<RouteBase> _routes = [
-    // Splash route
     GoRoute(
       path: AppRoutes.splash,
       builder: (context, state) => const _SplashPage(),
     ),
-
-    // Welcome route
     GoRoute(
       path: AppRoutes.welcome,
       builder: (context, state) => const WelcomePage(),
     ),
-
-    // Login route
     GoRoute(
       path: AppRoutes.login,
       builder: (context, state) => const LoginPage(),
     ),
-
-    // Signup route
     GoRoute(
       path: AppRoutes.signup,
       builder: (context, state) {
         final extra = state.extra as Map<String, dynamic>?;
-        final role = extra?['role'] as String? ?? 'user';
-        return SignupPage(role: role);
+        return SignupPage(role: extra?['role'] ?? 'user');
       },
     ),
 
-    // User routes
+    // --- USER ROUTES ---
     GoRoute(
       path: AppRoutes.userHome,
       builder: (context, state) => const UserHomePage(),
       routes: [
+        GoRoute(path: 'scan', builder: (context, state) => const ScanPage()),
         GoRoute(
-          path: 'scan',
-          builder: (context, state) => const ScanPage(),
+          path: 'notification',
+          builder: (context, state) => const UserNotificationsPage(),
         ),
         GoRoute(
           path: 'payment-preview',
           builder: (context, state) {
             final extra = state.extra as Map<String, dynamic>?;
-            if (extra == null) {
-              return const _PlaceholderPage(title: 'Invalid Payment');
-            }
             return PaymentPreviewPage(
-              data: PaymentPreviewData.fromMap(extra),
+              data: PaymentPreviewData.fromMap(extra ?? {}),
             );
           },
         ),
@@ -196,11 +159,8 @@ class AppRouter {
           path: 'payment-success',
           builder: (context, state) {
             final extra = state.extra as Map<String, dynamic>?;
-            if (extra == null) {
-              return const _PlaceholderPage(title: 'Invalid Payment');
-            }
             return PaymentSuccessPage(
-              data: PaymentSuccessData.fromMap(extra),
+              data: PaymentSuccessData.fromMap(extra ?? {}),
             );
           },
         ),
@@ -210,10 +170,9 @@ class AppRouter {
         ),
         GoRoute(
           path: 'orders/:orderId',
-          builder: (context, state) {
-            final orderId = state.pathParameters['orderId'] ?? '';
-            return UserOrderDetailPage(orderId: orderId);
-          },
+          builder: (context, state) => UserOrderDetailPage(
+            orderId: state.pathParameters['orderId'] ?? '',
+          ),
         ),
         GoRoute(
           path: 'profile',
@@ -226,7 +185,13 @@ class AppRouter {
       ],
     ),
 
-    // Partner routes
+    // --- ABOUT ROUTE (Top Level) ---
+    GoRoute(
+      path: AppRoutes.about,
+      builder: (context, state) => const AboutPage(),
+    ),
+
+    // --- PARTNER ROUTES ---
     GoRoute(
       path: AppRoutes.partnerOnboarding,
       builder: (context, state) => const PartnerOnboardingPage(),
@@ -245,10 +210,9 @@ class AppRouter {
         ),
         GoRoute(
           path: 'orders/:orderId',
-          builder: (context, state) {
-            final orderId = state.pathParameters['orderId'] ?? '';
-            return PartnerOrderDetailPage(orderId: orderId);
-          },
+          builder: (context, state) => PartnerOrderDetailPage(
+            orderId: state.pathParameters['orderId'] ?? '',
+          ),
         ),
         GoRoute(
           path: 'analytics',
@@ -260,39 +224,9 @@ class AppRouter {
         ),
       ],
     ),
-
-    // Admin routes
-    GoRoute(
-      path: AppRoutes.adminDashboard,
-      builder: (context, state) => const _PlaceholderPage(title: 'Admin Dashboard'),
-      routes: [
-        GoRoute(
-          path: 'merchants',
-          builder: (context, state) => const _PlaceholderPage(title: 'Merchants'),
-        ),
-        GoRoute(
-          path: 'merchants/:merchantId',
-          builder: (context, state) {
-            final merchantId = state.pathParameters['merchantId'] ?? '';
-            return _PlaceholderPage(title: 'Merchant $merchantId');
-          },
-        ),
-        GoRoute(
-          path: 'users',
-          builder: (context, state) => const _PlaceholderPage(title: 'Users'),
-        ),
-        GoRoute(
-          path: 'orders',
-          builder: (context, state) => const _PlaceholderPage(title: 'All Orders'),
-        ),
-        GoRoute(
-          path: 'settlements',
-          builder: (context, state) => const _PlaceholderPage(title: 'Settlements'),
-        ),
-      ],
-    ),
   ];
 }
+// ... Rest of your _SplashPage and _ErrorPage code
 
 /// Splash page - shown during initialization
 class _SplashPage extends StatelessWidget {
@@ -323,9 +257,7 @@ class _SplashPage extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Travellers Triibe',
-              style: AppTextStyles.h2.copyWith(
-                color: AppColors.textPrimary,
-              ),
+              style: AppTextStyles.h2.copyWith(color: AppColors.textPrimary),
             ),
             const SizedBox(height: 8),
             Text(
@@ -359,9 +291,7 @@ class _PlaceholderPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
+      appBar: AppBar(title: Text(title)),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -374,9 +304,7 @@ class _PlaceholderPage extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               title,
-              style: AppTextStyles.h3.copyWith(
-                color: AppColors.textPrimary,
-              ),
+              style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
             ),
             const SizedBox(height: 8),
             Text(
@@ -430,7 +358,8 @@ class _ErrorPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  error?.toString() ?? 'The page you are looking for does not exist.',
+                  error?.toString() ??
+                      'The page you are looking for does not exist.',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.textSecondary,

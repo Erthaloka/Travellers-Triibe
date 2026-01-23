@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:travellers_triibe/features/user/user_notification.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_endpoints.dart';
 import '../../core/theme/app_theme.dart';
@@ -153,6 +154,55 @@ class _UserHomePageState extends State<UserHomePage> {
               ],
             ),
           ),
+
+          // --- FIXED: DYNAMIC NOTIFICATION BELL ---
+          ListenableBuilder(
+            listenable: notificationService, // Listens to your global service
+            builder: (context, child) {
+              // Checks real-time unread status
+              final bool hasUnread = notificationService.notifications.any(
+                (n) => !n['isRead'],
+              );
+
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  GestureDetector(
+                    onTap: () => context.push(AppRoutes.notification),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Icon(
+                        Icons.notifications_outlined,
+                        color: AppColors.textPrimary,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                  // The red dot now only appears if hasUnread is true
+                  if (hasUnread)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.background,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(width: 4),
+
           // Profile Icon
           GestureDetector(
             onTap: () => context.go(AppRoutes.userProfile),
@@ -167,12 +217,10 @@ class _UserHomePageState extends State<UserHomePage> {
                 child: Text(
                   account?.name.isNotEmpty == true
                       ? account!.name[0].toUpperCase()
-                      : account?.email.isNotEmpty == true
-                      ? account!.email[0].toUpperCase()
                       : 'U',
                   style: AppTextStyles.labelLarge.copyWith(
                     color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),

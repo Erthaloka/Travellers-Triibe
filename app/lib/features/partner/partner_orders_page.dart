@@ -7,7 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../routes/app_router.dart';
 
-/// Mock partner order model
+/// Partner order model
 class PartnerOrder {
   final String orderId;
   final String userPhone;
@@ -43,67 +43,46 @@ class PartnerOrdersPage extends StatefulWidget {
 class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
   String _selectedFilter = 'all';
 
-  // Mock orders for demo
+  // --- MOCK DATA ADDED HERE ---
   final List<PartnerOrder> _mockOrders = [
     PartnerOrder(
-      orderId: 'ORD-001',
-      userPhone: '+91****3210',
-      billAmount: 1000,
-      discountAmount: 60,
-      platformFee: 9.40,
-      netReceivable: 930.60,
-      date: DateTime.now().subtract(const Duration(minutes: 10)),
-      status: 'COMPLETED',
-      settlementMode: 'PLATFORM',
+      orderId: 'ORD88219',
+      userPhone: '+91 98765 43210',
+      billAmount: 1250.0,
+      discountAmount: 150.0,
+      platformFee: 25.0,
+      netReceivable: 1075.0,
+      date: DateTime.now().subtract(const Duration(hours: 2)),
+      status: 'PENDING',
+      settlementMode: 'UPI',
     ),
     PartnerOrder(
-      orderId: 'ORD-002',
-      userPhone: '+91****5678',
-      billAmount: 2000,
-      discountAmount: 120,
-      platformFee: 18.80,
-      netReceivable: 1861.20,
-      date: DateTime.now().subtract(const Duration(minutes: 25)),
-      status: 'COMPLETED',
-      settlementMode: 'PLATFORM',
-    ),
-    PartnerOrder(
-      orderId: 'ORD-003',
-      userPhone: '+91****9012',
-      billAmount: 500,
-      discountAmount: 30,
-      platformFee: 4.70,
-      netReceivable: 465.30,
-      date: DateTime.now().subtract(const Duration(hours: 1)),
-      status: 'COMPLETED',
-      settlementMode: 'PLATFORM',
-    ),
-    PartnerOrder(
-      orderId: 'ORD-004',
-      userPhone: '+91****3456',
-      billAmount: 1500,
-      discountAmount: 90,
-      platformFee: 14.10,
-      netReceivable: 1395.90,
-      date: DateTime.now().subtract(const Duration(hours: 3)),
-      status: 'SETTLED',
-      settlementMode: 'PLATFORM',
-    ),
-    PartnerOrder(
-      orderId: 'ORD-005',
-      userPhone: '+91****7890',
-      billAmount: 3000,
-      discountAmount: 180,
-      platformFee: 28.20,
-      netReceivable: 2791.80,
+      orderId: 'ORD88104',
+      userPhone: '+91 70123 45678',
+      billAmount: 500.0,
+      discountAmount: 50.0,
+      platformFee: 10.0,
+      netReceivable: 440.0,
       date: DateTime.now().subtract(const Duration(days: 1)),
       status: 'SETTLED',
-      settlementMode: 'PLATFORM',
+      settlementMode: 'Bank Transfer',
+    ),
+    PartnerOrder(
+      orderId: 'ORD87992',
+      userPhone: '+91 90000 11111',
+      billAmount: 2100.0,
+      discountAmount: 300.0,
+      platformFee: 40.0,
+      netReceivable: 1760.0,
+      date: DateTime.now().subtract(const Duration(days: 2)),
+      status: 'SETTLED',
+      settlementMode: 'UPI',
     ),
   ];
 
   List<PartnerOrder> get _filteredOrders {
     if (_selectedFilter == 'all') return _mockOrders;
+    // Filters based on the status string
     return _mockOrders
         .where((o) => o.status.toLowerCase() == _selectedFilter.toLowerCase())
         .toList();
@@ -143,7 +122,8 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
           children: [
             _buildFilterChip('all', 'All'),
             const SizedBox(width: 8),
-            _buildFilterChip('completed', 'Pending'),
+            // Changed value to 'pending' to match mock data status
+            _buildFilterChip('pending', 'Pending'),
             const SizedBox(width: 8),
             _buildFilterChip('settled', 'Settled'),
           ],
@@ -163,7 +143,7 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
         });
       },
       backgroundColor: AppColors.surfaceVariant,
-      selectedColor: AppColors.partnerAccent.withValues(alpha: 0.2),
+      selectedColor: AppColors.partnerAccent.withOpacity(0.2),
       labelStyle: TextStyle(
         color: isSelected ? AppColors.partnerAccent : AppColors.textSecondary,
       ),
@@ -212,9 +192,7 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
           ),
           Text(
             CurrencyFormatter.format(totalAmount),
-            style: AppTextStyles.h3.copyWith(
-              color: AppColors.success,
-            ),
+            style: AppTextStyles.h3.copyWith(color: AppColors.success),
           ),
         ],
       ),
@@ -241,7 +219,6 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () {
-          // Navigate to order detail
           context.go('/partner/orders/${order.orderId}');
         },
         borderRadius: BorderRadius.circular(12),
@@ -260,7 +237,7 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
                     height: 44,
                     decoration: BoxDecoration(
                       color: (isSettled ? AppColors.success : AppColors.warning)
-                          .withValues(alpha: 0.15),
+                          .withOpacity(0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
@@ -290,10 +267,11 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: (isSettled
-                                        ? AppColors.success
-                                        : AppColors.warning)
-                                    .withValues(alpha: 0.15),
+                                color:
+                                    (isSettled
+                                            ? AppColors.success
+                                            : AppColors.warning)
+                                        .withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -324,7 +302,10 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  _buildOrderStat('Bill', CurrencyFormatter.format(order.billAmount)),
+                  _buildOrderStat(
+                    'Bill',
+                    CurrencyFormatter.format(order.billAmount),
+                  ),
                   _buildOrderStat(
                     'Discount',
                     '-${CurrencyFormatter.format(order.discountAmount)}',
@@ -380,16 +361,12 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
           const SizedBox(height: 16),
           Text(
             'No orders yet',
-            style: AppTextStyles.h4.copyWith(
-              color: AppColors.textSecondary,
-            ),
+            style: AppTextStyles.h4.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 8),
           Text(
             'Generate a bill to start receiving payments',
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textHint,
-            ),
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textHint),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(

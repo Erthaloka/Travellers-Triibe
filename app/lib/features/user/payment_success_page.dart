@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../core/utils/formatters.dart';
 import '../../routes/app_router.dart';
 
@@ -40,6 +41,22 @@ class PaymentSuccessPage extends StatelessWidget {
 
   const PaymentSuccessPage({super.key, required this.data});
 
+  void _shareReceipt() {
+    final String shareMessage =
+        '''
+💰 I just saved ${CurrencyFormatter.format(data.discountAmount)}!
+Verified payment at ${data.merchantName} via Travellers Triibe.
+
+Total Paid: ${CurrencyFormatter.format(data.finalAmount)}
+Order ID: ${data.orderId}
+
+Join the Triibe and start saving!
+''';
+
+    // This triggers the native Android/iOS share sheet
+    Share.share(shareMessage, subject: 'My Savings Receipt');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -73,18 +90,12 @@ class PaymentSuccessPage extends StatelessWidget {
             color: AppColors.success.withValues(alpha: 0.15),
             shape: BoxShape.circle,
           ),
-          child: Icon(
-            Icons.check_circle,
-            color: AppColors.success,
-            size: 60,
-          ),
+          child: Icon(Icons.check_circle, color: AppColors.success, size: 60),
         ),
         const SizedBox(height: 24),
         Text(
           'Payment Successful!',
-          style: AppTextStyles.h2.copyWith(
-            color: AppColors.textPrimary,
-          ),
+          style: AppTextStyles.h2.copyWith(color: AppColors.textPrimary),
         ),
         const SizedBox(height: 8),
         Text(
@@ -111,23 +122,15 @@ class PaymentSuccessPage extends StatelessWidget {
           ],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.success.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
-          Icon(
-            Icons.savings,
-            color: AppColors.success,
-            size: 32,
-          ),
+          Icon(Icons.savings, color: AppColors.success, size: 32),
           const SizedBox(height: 12),
           Text(
             'You Saved',
-            style: AppTextStyles.labelLarge.copyWith(
-              color: AppColors.success,
-            ),
+            style: AppTextStyles.labelLarge.copyWith(color: AppColors.success),
           ),
           const SizedBox(height: 4),
           Text(
@@ -207,13 +210,12 @@ class PaymentSuccessPage extends StatelessWidget {
         Text(
           label,
           style: (isTotal ? AppTextStyles.labelLarge : AppTextStyles.bodyMedium)
-              .copyWith(
-            color: AppColors.textSecondary,
-          ),
+              .copyWith(color: AppColors.textSecondary),
         ),
         Text(
           value,
-          style: valueStyle ??
+          style:
+              valueStyle ??
               (isTotal ? AppTextStyles.h4 : AppTextStyles.bodyMedium).copyWith(
                 color: valueColor ?? AppColors.textPrimary,
                 fontWeight: isTotal ? FontWeight.w600 : FontWeight.normal,
@@ -226,29 +228,33 @@ class PaymentSuccessPage extends StatelessWidget {
   Widget _buildActions(BuildContext context) {
     return Column(
       children: [
+        // NEW FEATURE: SHARE BUTTON
         SizedBox(
           width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () {
-              // Navigate to order detail
-              // For now, go to orders list
-              context.go(AppRoutes.userOrders);
-            },
-            child: const Text('View Order'),
+          child: ElevatedButton.icon(
+            onPressed: _shareReceipt,
+            icon: const Icon(Icons.share_outlined),
+            label: const Text('Share Receipt'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: OutlinedButton(
-            onPressed: () => context.go(AppRoutes.userHome),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: AppColors.border),
-            ),
-            child: Text(
-              'Go Home',
-              style: TextStyle(color: AppColors.textPrimary),
-            ),
+            onPressed: () => context.go(AppRoutes.userOrders),
+            child: const Text('View My Orders'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextButton(
+          onPressed: () => context.go(AppRoutes.userHome),
+          child: Text(
+            'Back to Home',
+            style: TextStyle(color: AppColors.textSecondary),
           ),
         ),
       ],
