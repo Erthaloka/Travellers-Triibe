@@ -1,69 +1,82 @@
-/// User Savings Page - Shows lifetime savings and breakdown
+/// User Savings Page - Shows lifetime savings and breakdown-savings_page.dart
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/network/api_client.dart';
+import '../../core/network/api_endpoints.dart';
 import '../../routes/app_router.dart';
 
-/// Savings summary data
-class SavingsSummary {
-  final double totalSavings;
-  final int totalOrders;
-  final double averageDiscount;
-  final Map<String, double> categoryBreakdown;
-  final List<MonthlySaving> monthlyHistory;
-
-  SavingsSummary({
-    required this.totalSavings,
-    required this.totalOrders,
-    required this.averageDiscount,
-    required this.categoryBreakdown,
-    required this.monthlyHistory,
-  });
-}
-
-class MonthlySaving {
-  final String month;
-  final double amount;
-  final int orders;
-
-  MonthlySaving({
-    required this.month,
-    required this.amount,
-    required this.orders,
-  });
-}
-
 /// User Savings Page
-class UserSavingsPage extends StatelessWidget {
+class UserSavingsPage extends StatefulWidget {
   const UserSavingsPage({super.key});
 
-  // Mock data for demo
-  SavingsSummary get _mockSavings => SavingsSummary(
-        totalSavings: 12450.00,
-        totalOrders: 156,
-        averageDiscount: 5.8,
-        categoryBreakdown: {
-          'FOOD': 5200.00,
-          'STAY': 4800.00,
-          'SERVICE': 1650.00,
-          'RETAIL': 800.00,
-        },
-        monthlyHistory: [
-          MonthlySaving(month: 'Dec 2024', amount: 2340.00, orders: 28),
-          MonthlySaving(month: 'Nov 2024', amount: 1890.00, orders: 24),
-          MonthlySaving(month: 'Oct 2024', amount: 2100.00, orders: 26),
-          MonthlySaving(month: 'Sep 2024', amount: 1750.00, orders: 22),
-          MonthlySaving(month: 'Aug 2024', amount: 2050.00, orders: 25),
-          MonthlySaving(month: 'Jul 2024', amount: 2320.00, orders: 31),
-        ],
-      );
+  @override
+  State<UserSavingsPage> createState() => _UserSavingsPageState();
+}
+
+class _UserSavingsPageState extends State<UserSavingsPage> {
+  bool _isLoading = true;
+  Map<String, dynamic> _savingsData = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavings();
+  }
+
+  Future<void> _loadSavings() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final apiClient = context.read<ApiClient>();
+      final response = await apiClient.get(ApiEndpoints.userSavings);
+
+      if (response.success && response.data != null) {
+        setState(() {
+          _savingsData = response.data!['data'] ?? response.data!;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load savings: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final savings = _mockSavings;
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.go(AppRoutes.userHome),
+          ),
+          title: const Text('My Savings'),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final totalSavings =
+        (_savingsData['totalSavings'] as num?)?.toDouble() ?? 0;
+    final totalOrders = (_savingsData['totalOrders'] as num?)?.toInt() ?? 0;
+    final thisMonth = _savingsData['thisMonth'] ?? {};
+    final thisMonthSavings = (thisMonth['savings'] as num?)?.toDouble() ?? 0;
+    final growthPercentage =
+        (_savingsData['growthPercentage'] as num?)?.toDouble() ?? 0;
+    final categorySavings = (_savingsData['categorySavings'] as List?) ?? [];
+    final monthlySavings = (_savingsData['monthlySavings'] as List?) ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -73,30 +86,40 @@ class UserSavingsPage extends StatelessWidget {
         ),
         title: const Text('My Savings'),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildSavingsHeader(savings),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildStatsRow(savings),
-                  const SizedBox(height: 24),
-                  _buildCategoryBreakdown(savings),
-                  const SizedBox(height: 24),
-                  _buildMonthlyHistory(savings),
-                ],
+      body: RefreshIndicator(
+        onRefresh: _loadSavings,
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              _buildSavingsHeader(totalSavings),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatsRow(
+                      totalOrders,
+                      thisMonthSavings,
+                      growthPercentage,
+                    ),
+                    const SizedBox(height: 24),
+                    if (categorySavings.isNotEmpty) ...[
+                      _buildCategoryBreakdown(categorySavings),
+                      const SizedBox(height: 24),
+                    ],
+                    if (monthlySavings.isNotEmpty)
+                      _buildMonthlyHistory(monthlySavings),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSavingsHeader(SavingsSummary savings) {
+  Widget _buildSavingsHeader(double totalSavings) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -134,11 +157,8 @@ class UserSavingsPage extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            CurrencyFormatter.format(savings.totalSavings),
-            style: AppTextStyles.h1.copyWith(
-              color: Colors.white,
-              fontSize: 40,
-            ),
+            CurrencyFormatter.format(totalSavings / 100),
+            style: AppTextStyles.h1.copyWith(color: Colors.white, fontSize: 40),
           ),
           const SizedBox(height: 8),
           Container(
@@ -149,9 +169,7 @@ class UserSavingsPage extends StatelessWidget {
             ),
             child: Text(
               'Lifetime savings with Travellers Triibe',
-              style: AppTextStyles.bodySmall.copyWith(
-                color: Colors.white,
-              ),
+              style: AppTextStyles.bodySmall.copyWith(color: Colors.white),
             ),
           ),
         ],
@@ -159,13 +177,17 @@ class UserSavingsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsRow(SavingsSummary savings) {
+  Widget _buildStatsRow(
+    int totalOrders,
+    double thisMonthSavings,
+    double growth,
+  ) {
     return Row(
       children: [
         Expanded(
           child: _buildStatCard(
             icon: Icons.receipt_long_outlined,
-            value: '${savings.totalOrders}',
+            value: '$totalOrders',
             label: 'Total Orders',
             color: AppColors.primary,
           ),
@@ -173,9 +195,9 @@ class UserSavingsPage extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: _buildStatCard(
-            icon: Icons.percent_outlined,
-            value: '${savings.averageDiscount.toStringAsFixed(1)}%',
-            label: 'Avg Discount',
+            icon: Icons.calendar_today_outlined,
+            value: CurrencyFormatter.formatCompact(thisMonthSavings / 100),
+            label: 'This Month',
             color: AppColors.success,
           ),
         ),
@@ -211,9 +233,7 @@ class UserSavingsPage extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             value,
-            style: AppTextStyles.h3.copyWith(
-              color: AppColors.textPrimary,
-            ),
+            style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
           ),
           const SizedBox(height: 2),
           Text(
@@ -227,9 +247,15 @@ class UserSavingsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildCategoryBreakdown(SavingsSummary savings) {
-    final categories = savings.categoryBreakdown;
-    final maxAmount = categories.values.reduce((a, b) => a > b ? a : b);
+  Widget _buildCategoryBreakdown(List<dynamic> categories) {
+    if (categories.isEmpty) return const SizedBox.shrink();
+
+    final maxSavings = categories.fold<double>(
+      0,
+      (max, cat) => ((cat['savings'] as num?)?.toDouble() ?? 0) > max
+          ? ((cat['savings'] as num?)?.toDouble() ?? 0)
+          : max,
+    );
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -243,19 +269,18 @@ class UserSavingsPage extends StatelessWidget {
         children: [
           Text(
             'Savings by Category',
-            style: AppTextStyles.h4.copyWith(
-              color: AppColors.textPrimary,
-            ),
+            style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
           ),
           const SizedBox(height: 20),
-          ...categories.entries.map((entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _buildCategoryRow(
-                  entry.key,
-                  entry.value,
-                  entry.value / maxAmount,
-                ),
-              )),
+          ...categories.map((cat) {
+            final category = cat['_id'] ?? 'OTHER';
+            final savings = (cat['savings'] as num?)?.toDouble() ?? 0;
+            final progress = maxSavings > 0 ? savings / maxSavings : 0.0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _buildCategoryRow(category, savings, progress),
+            );
+          }),
         ],
       ),
     );
@@ -269,11 +294,7 @@ class UserSavingsPage extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(
-              categoryInfo.icon,
-              size: 18,
-              color: categoryInfo.color,
-            ),
+            Icon(categoryInfo.icon, size: 18, color: categoryInfo.color),
             const SizedBox(width: 8),
             Text(
               categoryInfo.label,
@@ -283,7 +304,7 @@ class UserSavingsPage extends StatelessWidget {
             ),
             const Spacer(),
             Text(
-              CurrencyFormatter.format(amount),
+              CurrencyFormatter.format(amount / 100),
               style: AppTextStyles.bodyMedium.copyWith(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
@@ -305,7 +326,7 @@ class UserSavingsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildMonthlyHistory(SavingsSummary savings) {
+  Widget _buildMonthlyHistory(List<dynamic> monthlyData) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -318,20 +339,23 @@ class UserSavingsPage extends StatelessWidget {
         children: [
           Text(
             'Monthly History',
-            style: AppTextStyles.h4.copyWith(
-              color: AppColors.textPrimary,
-            ),
+            style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
           ),
           const SizedBox(height: 16),
-          ...savings.monthlyHistory
-              .map((month) => _buildMonthRow(month))
-              ,
+          ...monthlyData.map((month) {
+            final monthId = month['_id'];
+            final savings = (month['savings'] as num?)?.toDouble() ?? 0;
+            final orders = (month['orders'] as num?)?.toInt() ?? 0;
+            final monthName = _getMonthName(monthId);
+
+            return _buildMonthRow(monthName, savings, orders);
+          }),
         ],
       ),
     );
   }
 
-  Widget _buildMonthRow(MonthlySaving month) {
+  Widget _buildMonthRow(String monthName, double amount, int orders) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -355,13 +379,13 @@ class UserSavingsPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  month.month,
+                  monthName,
                   style: AppTextStyles.bodyMedium.copyWith(
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 Text(
-                  '${month.orders} orders',
+                  '$orders orders',
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -370,7 +394,7 @@ class UserSavingsPage extends StatelessWidget {
             ),
           ),
           Text(
-            CurrencyFormatter.format(month.amount),
+            CurrencyFormatter.format(amount / 100),
             style: AppTextStyles.bodyLarge.copyWith(
               color: AppColors.success,
               fontWeight: FontWeight.w600,
@@ -381,20 +405,46 @@ class UserSavingsPage extends StatelessWidget {
     );
   }
 
+  String _getMonthName(dynamic monthId) {
+    if (monthId is int) {
+      const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
+      return monthId > 0 && monthId <= 12 ? months[monthId - 1] : 'Unknown';
+    }
+    return monthId.toString();
+  }
+
   _CategoryInfo _getCategoryInfo(String category) {
     switch (category.toUpperCase()) {
+      case 'RESTAURANT':
+      case 'CAFE':
       case 'FOOD':
         return _CategoryInfo(
           icon: Icons.restaurant_outlined,
           label: 'Food & Dining',
           color: const Color(0xFFFF6B6B),
         );
+      case 'HOTEL':
       case 'STAY':
         return _CategoryInfo(
           icon: Icons.hotel_outlined,
           label: 'Hotels & Stay',
           color: const Color(0xFF4ECDC4),
         );
+      case 'SALON':
+      case 'GYM':
       case 'SERVICE':
         return _CategoryInfo(
           icon: Icons.build_outlined,
@@ -422,9 +472,5 @@ class _CategoryInfo {
   final String label;
   final Color color;
 
-  _CategoryInfo({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
+  _CategoryInfo({required this.icon, required this.label, required this.color});
 }

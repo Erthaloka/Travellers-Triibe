@@ -1,35 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/auth/auth_provider.dart';
+import '../../core/network/api_endpoints.dart';
 
 // --- 1. THE SERVICE (Logic Layer) ---
 class NotificationService extends ChangeNotifier {
   final List<Map<String, dynamic>> _notifications = [];
   List<Map<String, dynamic>> get notifications => _notifications;
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
 
-  /// Helper to add a notification from anywhere in the app
-  void addNotification({
-    required String title,
-    required String body,
-    required String orderId,
-    required String category,
-  }) {
-    _notifications.insert(0, {
-      'id': DateTime.now().toString(),
-      'title': title,
-      'body': body,
-      'timestamp': DateTime.now(),
-      'orderId': orderId,
-      'category': category,
-      'isRead': false,
-    });
+  /// Fetch real notifications from backend
+  Future<void> fetchNotifications(dynamic apiClient) async {
+    _isLoading = true;
     notifyListeners();
+
+    try {
+      final response = await apiClient.get(ApiEndpoints.userNotifications);
+      if (response.success && response.data != null) {
+        _notifications.clear();
+        _notifications.addAll(List<Map<String, dynamic>>.from(response.data));
+      }
+    } catch (e) {
+      debugPrint("Error fetching notifications: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   void markAsRead(int index) {
-    _notifications[index]['isRead'] = true;
-    notifyListeners();
+    if (index >= 0 && index < _notifications.length) {
+      _notifications[index]['isRead'] = true;
+      notifyListeners();
+    }
   }
 
   void markAllAsRead() {
@@ -55,80 +62,69 @@ class _UserNotificationsPageState extends State<UserNotificationsPage> {
   @override
   void initState() {
     super.initState();
-    // Rebuild UI when the service updates
-    notificationService.addListener(_refresh);
 
-    // MOCK DATA GENERATOR: Remove this if you don't want sample data on load
-    if (notificationService.notifications.isEmpty) {
-      _addMockData();
-    }
-  }
-
-  @override
-  void dispose() {
-    notificationService.removeListener(_refresh);
-    super.dispose();
-  }
-
-  void _refresh() {
-    if (mounted) setState(() {});
-  }
-
-  void _addMockData() {
-    notificationService.addNotification(
-      title: 'Payment Successful',
-      body: 'You saved ₹60 at Spice Garden Restaurant.',
-      orderId: 'ORD001',
-      category: 'FOOD',
-    );
-    notificationService.addNotification(
-      title: 'Stay Confirmed',
-      body: 'Your booking at Hotel Sunrise is confirmed.',
-      orderId: 'ORD002',
-      category: 'STAY',
-    );
+    // ✅ FIXED: Using addPostFrameCallback ensures we fetch data
+    // ONLY after the build phase is complete, preventing the setState error.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = context.read<AuthProvider>();
+      notificationService.fetchNotifications(authProvider.apiClient);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final list = notificationService.notifications;
+    return ListenableBuilder(
+      listenable: notificationService,
+      builder: (context, _) {
+        final list = notificationService.notifications;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Notifications'),
-        centerTitle: true,
-        actions: [
-          if (list.any((n) => !n['isRead']))
-            TextButton(
-              onPressed: () => notificationService.markAllAsRead(),
-              child: const Text('Mark all read'),
-            ),
-        ],
-      ),
-      body: list.isEmpty
-          ? _buildEmptyState()
-          : ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              itemCount: list.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, indent: 70),
-              itemBuilder: (context, index) {
-                final item = list[index];
-                return _buildNotificationCard(item, index);
-              },
-            ),
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: const Text('Notifications'),
+            centerTitle: true,
+            actions: [
+              if (list.any((n) => !n['isRead']))
+                TextButton(
+                  onPressed: () => notificationService.markAllAsRead(),
+                  child: const Text('Mark all read'),
+                ),
+            ],
+          ),
+          body: notificationService.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: () {
+                    final authProvider = context.read<AuthProvider>();
+                    return notificationService.fetchNotifications(
+                      authProvider.apiClient,
+                    );
+                  },
+                  child: list.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          itemCount: list.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1, indent: 70),
+                          itemBuilder: (context, index) {
+                            return _buildNotificationCard(list[index], index);
+                          },
+                        ),
+                ),
+        );
+      },
     );
   }
 
   Widget _buildNotificationCard(Map<String, dynamic> item, int index) {
-    final bool isRead = item['isRead'];
+    final bool isRead = item['isRead'] ?? false;
 
     return Material(
       color: isRead ? Colors.transparent : AppColors.primary.withOpacity(0.05),
       child: InkWell(
         onTap: () {
           notificationService.markAsRead(index);
-          // Standard GoRouter navigation
           context.push('/user/orders/${item['orderId']}');
         },
         child: Padding(
@@ -136,14 +132,14 @@ class _UserNotificationsPageState extends State<UserNotificationsPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _getIcon(item['category'], isRead),
+              _getIcon(item['category'] ?? 'OTHER', isRead),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      item['title'],
+                      item['title'] ?? 'Notification',
                       style: AppTextStyles.bodyLarge.copyWith(
                         fontWeight: isRead ? FontWeight.w500 : FontWeight.bold,
                         color: AppColors.textPrimary,
@@ -151,14 +147,18 @@ class _UserNotificationsPageState extends State<UserNotificationsPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      item['body'],
+                      item['body'] ?? '',
                       style: AppTextStyles.bodyMedium.copyWith(
                         color: AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      DateTimeFormatter.formatRelative(item['timestamp']),
+                      DateTimeFormatter.formatRelative(
+                        item['timestamp'] is String
+                            ? DateTime.parse(item['timestamp'])
+                            : item['timestamp'],
+                      ),
                       style: AppTextStyles.labelSmall.copyWith(
                         color: AppColors.textHint,
                       ),
@@ -167,8 +167,8 @@ class _UserNotificationsPageState extends State<UserNotificationsPage> {
                 ),
               ),
               if (!isRead)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
                   child: CircleAvatar(
                     radius: 5,
                     backgroundColor: AppColors.primary,
@@ -214,23 +214,31 @@ class _UserNotificationsPageState extends State<UserNotificationsPage> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.notifications_none_outlined,
-            size: 80,
-            color: AppColors.textHint,
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.notifications_none_outlined,
+                size: 80,
+                color: AppColors.textHint,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "No notifications yet",
+                style: AppTextStyles.h4.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text("We'll alert you when something happens!"),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            "No notifications yet",
-            style: AppTextStyles.h4.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 8),
-          const Text("We'll alert you when something happens!"),
-        ],
+        ),
       ),
     );
   }

@@ -540,9 +540,7 @@ class UserProfilePage extends StatelessWidget {
           _buildSettingsItem(
             icon: Icons.notifications_outlined,
             label: 'Notifications',
-            onTap: () {
-              // TODO: Implement notifications settings
-            },
+            onTap: () => context.push(AppRoutes.notification),
           ),
           Divider(height: 1, color: AppColors.border),
           _buildSettingsItem(

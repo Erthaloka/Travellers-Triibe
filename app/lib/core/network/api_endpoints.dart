@@ -16,6 +16,7 @@ class ApiEndpoints {
   // ============== USER ==============
   static const String userProfile = '/users/profile';
   static const String userSavings = '/users/savings';
+  static const String userNotifications = '/users/notifications';
 
   // ============== ORDERS ==============
   static const String orders = '/orders';
