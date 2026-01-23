@@ -1,4 +1,4 @@
-/// Partner dashboard page with today's stats and quick actions
+/// Partner dashboard page with today's stats and quick actions - partner_dashboard_page.dart
 library;
 
 import 'package:flutter/material.dart';

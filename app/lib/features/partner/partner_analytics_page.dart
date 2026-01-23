@@ -1,10 +1,13 @@
-/// Partner analytics page - earnings and statistics
+/// Partner analytics page - earnings and statistics - partner_analytics_page.dart
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/network/api_client.dart';
+import '../../core/network/api_endpoints.dart';
 import '../../routes/app_router.dart';
 
 /// Partner analytics page
@@ -17,37 +20,54 @@ class PartnerAnalyticsPage extends StatefulWidget {
 
 class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
   String _selectedPeriod = 'month';
+  bool _isLoading = true;
+  Map<String, dynamic> _analyticsData = {};
 
-  // Mock analytics data
-  final Map<String, Map<String, dynamic>> _analyticsData = {
-    'today': {
-      'orders': 12,
-      'revenue': 15600.0,
-      'discountGiven': 936.0,
-      'platformFee': 146.64,
-      'netEarnings': 14517.36,
-      'repeatUsers': 3,
-    },
-    'week': {
-      'orders': 68,
-      'revenue': 89200.0,
-      'discountGiven': 5352.0,
-      'platformFee': 838.48,
-      'netEarnings': 83009.52,
-      'repeatUsers': 15,
-    },
-    'month': {
-      'orders': 284,
-      'revenue': 372000.0,
-      'discountGiven': 22320.0,
-      'platformFee': 3496.80,
-      'netEarnings': 346183.20,
-      'repeatUsers': 48,
-    },
-  };
+  @override
+  void initState() {
+    super.initState();
+    _loadAnalytics();
+  }
 
-  Map<String, dynamic> get _currentData =>
-      _analyticsData[_selectedPeriod] ?? _analyticsData['month']!;
+  Future<void> _loadAnalytics() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final apiClient = context.read<ApiClient>();
+      final response = await apiClient.get(ApiEndpoints.partnerAnalytics);
+
+      if (response.success && response.data != null) {
+        final data = response.data!['data'] ?? response.data!;
+        setState(() {
+          _analyticsData = data;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load analytics: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Map<String, dynamic> get _currentData {
+    if (_analyticsData.isEmpty) return {};
+
+    switch (_selectedPeriod) {
+      case 'today':
+        return _analyticsData['today'] ?? {};
+      case 'week':
+        return _analyticsData['thisWeek'] ?? {};
+      case 'month':
+      default:
+        return _analyticsData['summary'] ?? {};
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,23 +80,28 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
         title: const Text('Analytics'),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildPeriodSelector(),
-            const SizedBox(height: 24),
-            _buildEarningsCard(),
-            const SizedBox(height: 20),
-            _buildStatsGrid(),
-            const SizedBox(height: 24),
-            _buildBreakdownCard(),
-            const SizedBox(height: 24),
-            _buildInsightsCard(),
-          ],
-        ),
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadAnalytics,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildPeriodSelector(),
+                    const SizedBox(height: 24),
+                    _buildEarningsCard(),
+                    const SizedBox(height: 20),
+                    _buildStatsGrid(),
+                    const SizedBox(height: 24),
+                    _buildBreakdownCard(),
+                    const SizedBox(height: 24),
+                    _buildInsightsCard(),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
@@ -126,6 +151,12 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
   }
 
   Widget _buildEarningsCard() {
+    final revenue = (_currentData['revenue'] as num?)?.toDouble() ?? 0;
+    final discount = (_currentData['discount'] as num?)?.toDouble() ?? 0;
+    final platformFee = revenue * 0.01; // 1% platform fee
+    final netEarnings = revenue - discount - platformFee;
+    final orders = (_currentData['orders'] as num?)?.toInt() ?? 0;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -145,29 +176,21 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
         children: [
           Text(
             'Net Earnings',
-            style: AppTextStyles.labelLarge.copyWith(
-              color: Colors.white70,
-            ),
+            style: AppTextStyles.labelLarge.copyWith(color: Colors.white70),
           ),
           const SizedBox(height: 8),
           Text(
-            CurrencyFormatter.format(_currentData['netEarnings']),
-            style: AppTextStyles.h1.copyWith(
-              color: Colors.white,
-              fontSize: 36,
-            ),
+            CurrencyFormatter.format(netEarnings / 100),
+            style: AppTextStyles.h1.copyWith(color: Colors.white, fontSize: 36),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              _buildEarningsStat(
-                'Orders',
-                _currentData['orders'].toString(),
-              ),
+              _buildEarningsStat('Orders', orders.toString()),
               const SizedBox(width: 24),
               _buildEarningsStat(
-                'Repeat Users',
-                _currentData['repeatUsers'].toString(),
+                'Revenue',
+                CurrencyFormatter.formatCompact(revenue / 100),
               ),
             ],
           ),
@@ -180,30 +203,26 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          value,
-          style: AppTextStyles.h3.copyWith(
-            color: Colors.white,
-          ),
-        ),
+        Text(value, style: AppTextStyles.h3.copyWith(color: Colors.white)),
         Text(
           label,
-          style: AppTextStyles.bodySmall.copyWith(
-            color: Colors.white70,
-          ),
+          style: AppTextStyles.bodySmall.copyWith(color: Colors.white70),
         ),
       ],
     );
   }
 
   Widget _buildStatsGrid() {
+    final revenue = (_currentData['revenue'] as num?)?.toDouble() ?? 0;
+    final discount = (_currentData['discount'] as num?)?.toDouble() ?? 0;
+
     return Row(
       children: [
         Expanded(
           child: _buildStatCard(
             icon: Icons.currency_rupee,
             label: 'Total Revenue',
-            value: CurrencyFormatter.formatCompact(_currentData['revenue']),
+            value: CurrencyFormatter.formatCompact(revenue / 100),
             color: AppColors.primary,
           ),
         ),
@@ -212,7 +231,7 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
           child: _buildStatCard(
             icon: Icons.local_offer,
             label: 'Discounts Given',
-            value: CurrencyFormatter.formatCompact(_currentData['discountGiven']),
+            value: CurrencyFormatter.formatCompact(discount / 100),
             color: AppColors.warning,
           ),
         ),
@@ -248,9 +267,7 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
           const SizedBox(height: 12),
           Text(
             value,
-            style: AppTextStyles.h4.copyWith(
-              color: AppColors.textPrimary,
-            ),
+            style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
           ),
           Text(
             label,
@@ -264,6 +281,11 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
   }
 
   Widget _buildBreakdownCard() {
+    final revenue = (_currentData['revenue'] as num?)?.toDouble() ?? 0;
+    final discount = (_currentData['discount'] as num?)?.toDouble() ?? 0;
+    final platformFee = revenue * 0.01; // 1% platform fee
+    final netEarnings = revenue - discount - platformFee;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -277,25 +299,23 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
         children: [
           Text(
             'Earnings Breakdown',
-            style: AppTextStyles.h4.copyWith(
-              color: AppColors.textPrimary,
-            ),
+            style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary),
           ),
           const SizedBox(height: 16),
           _buildBreakdownRow(
             'Gross Revenue',
-            CurrencyFormatter.format(_currentData['revenue']),
+            CurrencyFormatter.format(revenue / 100),
           ),
           const SizedBox(height: 12),
           _buildBreakdownRow(
             'Discount Funded',
-            '-${CurrencyFormatter.format(_currentData['discountGiven'])}',
+            '-${CurrencyFormatter.format(discount / 100)}',
             valueColor: AppColors.warning,
           ),
           const SizedBox(height: 12),
           _buildBreakdownRow(
             'Platform Fee (1%)',
-            '-${CurrencyFormatter.format(_currentData['platformFee'])}',
+            '-${CurrencyFormatter.format(platformFee / 100)}',
             valueColor: AppColors.textSecondary,
           ),
           const Padding(
@@ -304,7 +324,7 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
           ),
           _buildBreakdownRow(
             'Net Earnings',
-            CurrencyFormatter.format(_currentData['netEarnings']),
+            CurrencyFormatter.format(netEarnings / 100),
             valueColor: AppColors.success,
             isTotal: true,
           ),
@@ -325,32 +345,34 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
         Text(
           label,
           style: (isTotal ? AppTextStyles.bodyLarge : AppTextStyles.bodyMedium)
-              .copyWith(
-            color: AppColors.textSecondary,
-          ),
+              .copyWith(color: AppColors.textSecondary),
         ),
         Text(
           value,
           style: (isTotal ? AppTextStyles.h4 : AppTextStyles.bodyMedium)
               .copyWith(
-            color: valueColor ?? AppColors.textPrimary,
-            fontWeight: isTotal ? FontWeight.w600 : FontWeight.normal,
-          ),
+                color: valueColor ?? AppColors.textPrimary,
+                fontWeight: isTotal ? FontWeight.w600 : FontWeight.normal,
+              ),
         ),
       ],
     );
   }
 
   Widget _buildInsightsCard() {
+    final orders = (_currentData['orders'] as num?)?.toInt() ?? 0;
+    final revenue = (_currentData['revenue'] as num?)?.toDouble() ?? 0;
+    final discount = (_currentData['discount'] as num?)?.toDouble() ?? 0;
+    final avgOrderValue = orders > 0 ? revenue / orders : 0;
+    final discountPercent = revenue > 0 ? (discount / revenue) * 100 : 0;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.info.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,25 +383,20 @@ class _PartnerAnalyticsPageState extends State<PartnerAnalyticsPage> {
               const SizedBox(width: 8),
               Text(
                 'Insights',
-                style: AppTextStyles.h4.copyWith(
-                  color: AppColors.info,
-                ),
+                style: AppTextStyles.h4.copyWith(color: AppColors.info),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _buildInsightItem(
-            '${_currentData['repeatUsers']} repeat customers this period',
-            Icons.people,
-          ),
+          _buildInsightItem('$orders orders this period', Icons.receipt_long),
           const SizedBox(height: 8),
           _buildInsightItem(
-            'Average order value: ${CurrencyFormatter.format(_currentData['revenue'] / _currentData['orders'])}',
+            'Average order value: ${CurrencyFormatter.format(avgOrderValue / 100)}',
             Icons.trending_up,
           ),
           const SizedBox(height: 8),
           _buildInsightItem(
-            'Discount investment: ${((_currentData['discountGiven'] / _currentData['revenue']) * 100).toStringAsFixed(1)}% of revenue',
+            'Discount investment: ${discountPercent.toStringAsFixed(1)}% of revenue',
             Icons.savings,
           ),
         ],

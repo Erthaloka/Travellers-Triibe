@@ -3,73 +3,91 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
-
-/// Partner order detail data model
-class PartnerOrderDetail {
-  final String orderId;
-  final String userPhone;
-  final double billAmount;
-  final double discountPercent;
-  final double discountAmount;
-  final double platformFee;
-  final double netReceivable;
-  final DateTime createdAt;
-  final DateTime? settledAt;
-  final String status;
-  final String settlementMode;
-  final String? settlementId;
-  final String paymentMethod;
-  final String? transactionId;
-
-  PartnerOrderDetail({
-    required this.orderId,
-    required this.userPhone,
-    required this.billAmount,
-    required this.discountPercent,
-    required this.discountAmount,
-    required this.platformFee,
-    required this.netReceivable,
-    required this.createdAt,
-    this.settledAt,
-    required this.status,
-    required this.settlementMode,
-    this.settlementId,
-    required this.paymentMethod,
-    this.transactionId,
-  });
-}
+import '../../core/network/api_client.dart';
+import '../../core/network/api_endpoints.dart';
 
 /// Partner Order Detail Page
-class PartnerOrderDetailPage extends StatelessWidget {
+class PartnerOrderDetailPage extends StatefulWidget {
   final String orderId;
 
   const PartnerOrderDetailPage({super.key, required this.orderId});
 
-  // Mock data for demo
-  PartnerOrderDetail get _mockOrder => PartnerOrderDetail(
-        orderId: orderId,
-        userPhone: '+91 ****3210',
-        billAmount: 1000.00,
-        discountPercent: 6,
-        discountAmount: 60.00,
-        platformFee: 9.40,
-        netReceivable: 930.60,
-        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-        settledAt: DateTime.now().subtract(const Duration(hours: 1)),
-        status: 'SETTLED',
-        settlementMode: 'PLATFORM',
-        settlementId: 'STL_abc123xyz',
-        paymentMethod: 'UPI',
-        transactionId: 'pay_NxYz123456789',
+  @override
+  State<PartnerOrderDetailPage> createState() => _PartnerOrderDetailPageState();
+}
+
+class _PartnerOrderDetailPageState extends State<PartnerOrderDetailPage> {
+  bool _isLoading = true;
+  Map<String, dynamic>? _orderData;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOrderDetails();
+  }
+
+  Future<void> _loadOrderDetails() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final apiClient = context.read<ApiClient>();
+      final response = await apiClient.get(
+        '${ApiEndpoints.orders}/${widget.orderId}',
       );
+
+      if (response.success && response.data != null) {
+        setState(() {
+          _orderData = response.data!['data'] ?? response.data!;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load order: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final order = _mockOrder;
-    final isSettled = order.status == 'SETTLED';
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.pop(),
+          ),
+          title: const Text('Order Details'),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_orderData == null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.pop(),
+          ),
+          title: const Text('Order Details'),
+        ),
+        body: const Center(child: Text('Order not found')),
+      );
+    }
+
+    final order = _orderData!;
+    final status = order['status'] ?? 'PENDING';
+    final isSettled = status == 'COMPLETED';
 
     return Scaffold(
       appBar: AppBar(
@@ -103,9 +121,10 @@ class PartnerOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusHeader(PartnerOrderDetail order, bool isSettled) {
+  Widget _buildStatusHeader(Map<String, dynamic> order, bool isSettled) {
     final statusColor = isSettled ? AppColors.success : AppColors.warning;
     final statusBgColor = isSettled ? AppColors.successLight : AppColors.warningLight;
+    final createdAt = DateTime.tryParse(order['createdAt'] ?? '') ?? DateTime.now();
 
     return Container(
       width: double.infinity,
@@ -131,12 +150,12 @@ class PartnerOrderDetailPage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            isSettled ? 'Payment Settled' : 'Settlement Pending',
+            isSettled ? 'Payment Completed' : 'Payment Pending',
             style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
           ),
           const SizedBox(height: 4),
           Text(
-            DateTimeFormatter.formatDateTime(order.createdAt),
+            DateTimeFormatter.formatDateTime(createdAt),
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -146,7 +165,11 @@ class PartnerOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildCustomerInfo(PartnerOrderDetail order) {
+  Widget _buildCustomerInfo(Map<String, dynamic> order) {
+    final user = order['userId'];
+    final userPhone = user?['phone'] ?? 'Unknown';
+    final paymentMethod = order['paymentMethod'] ?? 'UPI';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -182,7 +205,7 @@ class PartnerOrderDetailPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  order.userPhone,
+                  userPhone,
                   style: AppTextStyles.bodyLarge.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -197,7 +220,7 @@ class PartnerOrderDetailPage extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              order.paymentMethod,
+              paymentMethod,
               style: AppTextStyles.labelSmall.copyWith(
                 color: AppColors.info,
                 fontWeight: FontWeight.w600,
@@ -209,7 +232,13 @@ class PartnerOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildEarningsBreakdown(PartnerOrderDetail order) {
+  Widget _buildEarningsBreakdown(Map<String, dynamic> order) {
+    final originalAmount = (order['originalAmount'] as num?)?.toDouble() ?? 0;
+    final discountRate = (order['discountRate'] as num?)?.toDouble() ?? 0;
+    final discountAmount = (order['discountAmount'] as num?)?.toDouble() ?? 0;
+    final platformFee = (order['platformFee'] as num?)?.toDouble() ?? 0;
+    final partnerPayout = (order['partnerPayout'] as num?)?.toDouble() ?? 0;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -227,17 +256,17 @@ class PartnerOrderDetailPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _buildAmountRow('Bill Amount', CurrencyFormatter.format(order.billAmount)),
+          _buildAmountRow('Bill Amount', CurrencyFormatter.format(originalAmount / 100)),
           const SizedBox(height: 12),
           _buildAmountRow(
-            'Discount Funded (${order.discountPercent.toInt()}%)',
-            '- ${CurrencyFormatter.format(order.discountAmount)}',
+            'Discount Funded (${discountRate.toInt()}%)',
+            '- ${CurrencyFormatter.format(discountAmount / 100)}',
             valueColor: AppColors.warning,
           ),
           const SizedBox(height: 12),
           _buildAmountRow(
             'Platform Fee (1%)',
-            '- ${CurrencyFormatter.format(order.platformFee)}',
+            '- ${CurrencyFormatter.format(platformFee / 100)}',
             valueColor: AppColors.textSecondary,
           ),
           const Padding(
@@ -246,7 +275,7 @@ class PartnerOrderDetailPage extends StatelessWidget {
           ),
           _buildAmountRow(
             'Net Receivable',
-            CurrencyFormatter.format(order.netReceivable),
+            CurrencyFormatter.format(partnerPayout / 100),
             valueColor: AppColors.success,
             isTotal: true,
           ),
@@ -256,11 +285,11 @@ class PartnerOrderDetailPage extends StatelessWidget {
   }
 
   Widget _buildAmountRow(
-    String label,
-    String value, {
-    Color? valueColor,
-    bool isTotal = false,
-  }) {
+      String label,
+      String value, {
+        Color? valueColor,
+        bool isTotal = false,
+      }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -280,7 +309,12 @@ class PartnerOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildSettlementInfo(PartnerOrderDetail order, bool isSettled) {
+  Widget _buildSettlementInfo(Map<String, dynamic> order, bool isSettled) {
+    final settlementMode = order['settlementMode'] ?? 'PLATFORM';
+    final completedAt = order['completedAt'] != null
+        ? DateTime.tryParse(order['completedAt'])
+        : null;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -312,22 +346,16 @@ class PartnerOrderDetailPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _buildSettlementRow('Mode', _getSettlementModeLabel(order.settlementMode)),
-          if (isSettled) ...[
+          _buildSettlementRow('Mode', _getSettlementModeLabel(settlementMode)),
+          if (isSettled && completedAt != null) ...[
             const SizedBox(height: 10),
             _buildSettlementRow(
-              'Settled On',
-              order.settledAt != null
-                  ? DateTimeFormatter.formatDateTime(order.settledAt!)
-                  : '-',
+              'Completed On',
+              DateTimeFormatter.formatDateTime(completedAt),
             ),
           ] else ...[
             const SizedBox(height: 10),
             _buildSettlementRow('Expected', 'Within T+1 business day'),
-          ],
-          if (order.settlementId != null) ...[
-            const SizedBox(height: 10),
-            _buildSettlementRow('Settlement ID', order.settlementId!),
           ],
         ],
       ),
@@ -354,7 +382,11 @@ class PartnerOrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildTransactionDetails(PartnerOrderDetail order) {
+  Widget _buildTransactionDetails(Map<String, dynamic> order) {
+    final orderId = order['orderId'] ?? widget.orderId;
+    final razorpayPaymentId = order['razorpayPaymentId'];
+    final createdAt = DateTime.tryParse(order['createdAt'] ?? '') ?? DateTime.now();
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -375,15 +407,15 @@ class PartnerOrderDetailPage extends StatelessWidget {
           _buildDetailRow(
             Icons.receipt_outlined,
             'Order ID',
-            order.orderId,
+            orderId,
             canCopy: true,
           ),
-          if (order.transactionId != null) ...[
+          if (razorpayPaymentId != null) ...[
             const SizedBox(height: 14),
             _buildDetailRow(
               Icons.tag_outlined,
               'Transaction ID',
-              order.transactionId!,
+              razorpayPaymentId,
               canCopy: true,
             ),
           ],
@@ -391,7 +423,7 @@ class PartnerOrderDetailPage extends StatelessWidget {
           _buildDetailRow(
             Icons.access_time,
             'Created At',
-            DateTimeFormatter.formatDateTime(order.createdAt),
+            DateTimeFormatter.formatDateTime(createdAt),
           ),
         ],
       ),
@@ -399,11 +431,11 @@ class PartnerOrderDetailPage extends StatelessWidget {
   }
 
   Widget _buildDetailRow(
-    IconData icon,
-    String label,
-    String value, {
-    bool canCopy = false,
-  }) {
+      IconData icon,
+      String label,
+      String value, {
+        bool canCopy = false,
+      }) {
     return Row(
       children: [
         Icon(icon, size: 20, color: AppColors.textSecondary),
@@ -428,22 +460,20 @@ class PartnerOrderDetailPage extends StatelessWidget {
                     ),
                   ),
                   if (canCopy)
-                    Builder(
-                      builder: (context) => GestureDetector(
-                        onTap: () {
-                          Clipboard.setData(ClipboardData(text: value));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('$label copied'),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-                        },
-                        child: Icon(
-                          Icons.copy_outlined,
-                          size: 16,
-                          color: AppColors.textHint,
-                        ),
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: value));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('$label copied'),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: Icon(
+                        Icons.copy_outlined,
+                        size: 16,
+                        color: AppColors.textHint,
                       ),
                     ),
                 ],

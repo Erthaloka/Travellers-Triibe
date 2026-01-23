@@ -210,9 +210,10 @@ class _GenerateQrPageState extends State<GenerateQrPage> {
                           IntrinsicWidth(
                             child: TextField(
                               controller: _amountController,
-                              keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
                               textAlign: TextAlign.center,
                               style: AppTextStyles.h1.copyWith(
                                 color: AppColors.textPrimary,
@@ -288,7 +289,9 @@ class _GenerateQrPageState extends State<GenerateQrPage> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _customDiscountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: InputDecoration(
                       labelText: 'Custom Discount %',
                       hintText: 'Enter 0-50',
@@ -302,7 +305,9 @@ class _GenerateQrPageState extends State<GenerateQrPage> {
                       ),
                     ),
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}')),
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d+\.?\d{0,1}'),
+                      ),
                     ],
                     onChanged: (value) {
                       final discount = double.tryParse(value) ?? 0;
@@ -360,7 +365,11 @@ class _GenerateQrPageState extends State<GenerateQrPage> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.error_outline, color: AppColors.error, size: 18),
+                        Icon(
+                          Icons.error_outline,
+                          color: AppColors.error,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -426,17 +435,17 @@ class _GenerateQrPageState extends State<GenerateQrPage> {
           label,
           style: (isBold ? AppTextStyles.bodyLarge : AppTextStyles.bodyMedium)
               .copyWith(
-            color: AppColors.textSecondary,
-            fontWeight: isBold ? FontWeight.w600 : FontWeight.normal,
-          ),
+                color: AppColors.textSecondary,
+                fontWeight: isBold ? FontWeight.w600 : FontWeight.normal,
+              ),
         ),
         Text(
           value,
           style: (isBold ? AppTextStyles.h4 : AppTextStyles.bodyMedium)
               .copyWith(
-            color: valueColor ?? AppColors.textPrimary,
-            fontWeight: isBold ? FontWeight.w700 : FontWeight.normal,
-          ),
+                color: valueColor ?? AppColors.textPrimary,
+                fontWeight: isBold ? FontWeight.w700 : FontWeight.normal,
+              ),
         ),
       ],
     );
@@ -616,7 +625,10 @@ class _GenerateQrPageState extends State<GenerateQrPage> {
                       ),
                       const SizedBox(height: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.success.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
