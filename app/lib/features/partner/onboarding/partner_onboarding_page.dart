@@ -33,10 +33,12 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
   final _stateController = TextEditingController();
   final _pincodeController = TextEditingController();
 
-  // Step 2: GST Verification
-  String _gstStatus = 'GST'; // ✅ Added to track dropdown state
+  // Step 2: Verification Logic
+  String _gstStatus = 'GST'; 
   final _gstinController = TextEditingController();
+  final _panController = TextEditingController(); // Added for PAN input
   final _legalNameController = TextEditingController();
+  PlatformFile? _verificationFile; // Added for document upload
   bool _gstConsent = false;
 
   // Step 3: Commercial Setup
@@ -52,6 +54,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
     _stateController.dispose();
     _pincodeController.dispose();
     _gstinController.dispose();
+    _panController.dispose();
     _legalNameController.dispose();
     super.dispose();
   }
@@ -89,14 +92,13 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             _stateController.text.isNotEmpty &&
             _pincodeController.text.length == 6;
       case 1:
-        // ✅ Updated Validation Logic
+        if (_legalNameController.text.isEmpty) return false;
         if (_gstStatus == 'GST') {
           return _gstinController.text.length == 15 &&
-              _legalNameController.text.isNotEmpty &&
+              _panController.text.length == 10 &&
               _gstConsent;
         } else {
-          // For Non-GST, only the Legal Business Name is required
-          return _legalNameController.text.isNotEmpty;
+          return _verificationFile != null;
         }
       case 2:
         return true;
@@ -106,24 +108,19 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
   }
 
   Future<void> _pickFile() async {
-    // Opens the native file explorer
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: [
-        'jpg',
-        'pdf',
-        'png',
-      ], // Filter specifically for your GST needs
-    );
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'pdf', 'png', 'jpeg'],
+      );
 
-    if (result != null) {
-      // Mobile: You get a file path
-      // Web: You get file bytes (result.files.first.bytes)
-      PlatformFile file = result.files.first;
-
-      print('Selected file: ${file.name}');
-    } else {
-      // User canceled the picker
+      if (result != null) {
+        setState(() {
+          _verificationFile = result.files.first;
+        });
+      }
+    } catch (e) {
+      debugPrint("File picker error: $e");
     }
   }
 
@@ -137,11 +134,11 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
         ApiEndpoints.partnerOnboard,
         body: {
           'businessName': _businessNameController.text.trim(),
-          'legalBusinessName': _legalNameController.text.trim(), // ✅ Added
+          'legalBusinessName': _legalNameController.text.trim(),
           'category': _mapCategoryToBackend(_selectedCategory),
           'businessPhone': authProvider.account?.phone ?? '',
           'businessEmail': authProvider.account?.email ?? '',
-          'isGstRegistered': _gstStatus == 'GST', // ✅ Added
+          'isGstRegistered': _gstStatus == 'GST',
           'address': {
             'line1': _addressLine1Controller.text.trim(),
             'city': _cityController.text.trim(),
@@ -149,10 +146,9 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             'pincode': _pincodeController.text.trim(),
           },
           'discountRate': _selectedDiscountSlab,
-          'gstNumber': _gstStatus == 'GST'
-              ? _gstinController.text.trim().toUpperCase()
-              : null, // ✅ Conditional
-          'panNumber': '',
+          'gstNumber': _gstStatus == 'GST' ? _gstinController.text.trim().toUpperCase() : null,
+          'panNumber': _gstStatus == 'GST' ? _panController.text.trim().toUpperCase() : null,
+          'settlementMode': _settlementMode,
         },
         requiresAuth: true,
       );
@@ -163,17 +159,9 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
         await authProvider.refreshAccount();
         setState(() => _isLoading = false);
         context.go(AppRoutes.partnerDashboard);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Partner registration submitted! Awaiting verification.',
-              ),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Partner registration submitted!'), backgroundColor: AppColors.success),
+        );
       } else {
         throw Exception(response.error?.message ?? 'Registration failed');
       }
@@ -181,26 +169,18 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Registration failed: ${error.toString()}'),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text('Registration failed: ${error.toString()}'), backgroundColor: AppColors.error),
       );
     }
   }
 
   String _mapCategoryToBackend(String flutterCategory) {
     switch (flutterCategory) {
-      case 'FOOD':
-        return 'RESTAURANT';
-      case 'STAY':
-        return 'HOTEL';
-      case 'SERVICE':
-        return 'SALON';
-      case 'RETAIL':
-        return 'RETAIL';
-      default:
-        return 'OTHER';
+      case 'FOOD': return 'RESTAURANT';
+      case 'STAY': return 'HOTEL';
+      case 'SERVICE': return 'SALON';
+      case 'RETAIL': return 'RETAIL';
+      default: return 'OTHER';
     }
   }
 
@@ -208,10 +188,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _previousStep,
-        ),
+        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _previousStep),
         title: const Text('Partner Registration'),
         centerTitle: true,
       ),
@@ -249,29 +226,14 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: isCompleted
-                        ? AppColors.success
-                        : isCurrent
-                        ? AppColors.primary
-                        : AppColors.surfaceVariant,
+                    color: isCompleted ? AppColors.success : isCurrent ? AppColors.primary : AppColors.surfaceVariant,
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isCompleted || isCurrent
-                          ? Colors.transparent
-                          : AppColors.border,
-                    ),
+                    border: Border.all(color: isCompleted || isCurrent ? Colors.transparent : AppColors.border),
                   ),
                   child: Center(
                     child: isCompleted
                         ? const Icon(Icons.check, color: Colors.white, size: 16)
-                        : Text(
-                            '${index + 1}',
-                            style: AppTextStyles.labelLarge.copyWith(
-                              color: isCurrent
-                                  ? Colors.white
-                                  : AppColors.textSecondary,
-                            ),
-                          ),
+                        : Text('${index + 1}', style: AppTextStyles.labelLarge.copyWith(color: isCurrent ? Colors.white : AppColors.textSecondary)),
                   ),
                 ),
                 if (index < 2)
@@ -296,37 +258,18 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Business Details',
-            style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
-          ),
+          Text('Business Details', style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary)),
           const SizedBox(height: 8),
-          Text(
-            'Tell us about your business',
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
+          Text('Tell us about your business', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 24),
-
           TextFormField(
             controller: _businessNameController,
             style: const TextStyle(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'Business Name',
-              hintText: 'Enter your business name',
-              prefixIcon: Icon(Icons.store_outlined),
-            ),
+            decoration: const InputDecoration(labelText: 'Business Name', hintText: 'Enter your business name', prefixIcon: Icon(Icons.store_outlined)),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
-
-          Text(
-            'Business Category',
-            style: AppTextStyles.labelLarge.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
+          Text('Business Category', style: AppTextStyles.labelLarge.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -334,58 +277,34 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             children: [
               _buildCategoryChip('FOOD', 'Food & Dining', Icons.restaurant),
               _buildCategoryChip('STAY', 'Hotel & Stay', Icons.hotel),
-              _buildCategoryChip(
-                'SERVICE',
-                'Services',
-                Icons.miscellaneous_services,
-              ),
+              _buildCategoryChip('SERVICE', 'Services', Icons.miscellaneous_services),
               _buildCategoryChip('RETAIL', 'Retail', Icons.shopping_bag),
             ],
           ),
           const SizedBox(height: 24),
-
-          Text(
-            'Business Address',
-            style: AppTextStyles.labelLarge.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
+          Text('Business Address', style: AppTextStyles.labelLarge.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 12),
-
           TextFormField(
             controller: _addressLine1Controller,
             style: const TextStyle(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'Street Address',
-              hintText: 'Building, Street name',
-              prefixIcon: Icon(Icons.location_on_outlined),
-            ),
+            decoration: const InputDecoration(labelText: 'Street Address', hintText: 'Building, Street name', prefixIcon: Icon(Icons.location_on_outlined)),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
-
           TextFormField(
             controller: _cityController,
             style: const TextStyle(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'City',
-              hintText: 'Enter city',
-              prefixIcon: Icon(Icons.location_city),
-            ),
+            decoration: const InputDecoration(labelText: 'City', hintText: 'Enter city', prefixIcon: Icon(Icons.location_city)),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
-
           Row(
             children: [
               Expanded(
                 child: TextFormField(
                   controller: _stateController,
                   style: const TextStyle(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(
-                    labelText: 'State',
-                    hintText: 'Enter state',
-                  ),
+                  decoration: const InputDecoration(labelText: 'State', hintText: 'Enter state'),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
@@ -397,11 +316,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                   maxLength: 6,
                   style: const TextStyle(color: AppColors.textPrimary),
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Pincode',
-                    hintText: '000000',
-                    counterText: '',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Pincode', hintText: '000000', counterText: ''),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
@@ -418,11 +333,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 16,
-            color: isSelected ? AppColors.primary : AppColors.textSecondary,
-          ),
+          Icon(icon, size: 16, color: isSelected ? AppColors.primary : AppColors.textSecondary),
           const SizedBox(width: 6),
           Text(label),
         ],
@@ -431,176 +342,92 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
       onSelected: (selected) => setState(() => _selectedCategory = value),
       backgroundColor: AppColors.surfaceVariant,
       selectedColor: AppColors.primary.withValues(alpha: 0.2),
-      labelStyle: TextStyle(
-        color: isSelected ? AppColors.primary : AppColors.textSecondary,
-      ),
-      side: BorderSide(
-        color: isSelected ? AppColors.primary : AppColors.border,
-      ),
+      labelStyle: TextStyle(color: isSelected ? AppColors.primary : AppColors.textSecondary),
+      side: BorderSide(color: isSelected ? AppColors.primary : AppColors.border),
       checkmarkColor: AppColors.primary,
     );
   }
 
-  // ✅ Updated Step 2 with GST Dropdown and Conditional Logic
   Widget _buildStep2GstVerification() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Business Verification',
-            style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
-          ),
+          Text('Business Verification', style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary)),
           const SizedBox(height: 8),
-          Text(
-            'Please provide your business registration details',
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
+          Text('Please provide your business registration details', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 24),
-
-          // --- 1. GST Status Dropdown ---
           DropdownButtonFormField<String>(
             value: _gstStatus,
-            decoration: const InputDecoration(
-              labelText: 'Registration Type',
-              prefixIcon: Icon(Icons.assignment_outlined),
-            ),
+            decoration: const InputDecoration(labelText: 'Registration Type', prefixIcon: Icon(Icons.assignment_outlined)),
             items: const [
               DropdownMenuItem(value: 'GST', child: Text('GST Registered')),
-              DropdownMenuItem(
-                value: 'NON-GST',
-                child: Text('Non-GST Business'),
-              ),
+              DropdownMenuItem(value: 'NON-GST', child: Text('Non-GST Business')),
             ],
-            onChanged: (value) {
-              setState(() {
-                _gstStatus = value!;
-              });
-            },
+            onChanged: (value) => setState(() {
+              _gstStatus = value!;
+              _verificationFile = null;
+            }),
           ),
           const SizedBox(height: 24),
-
-          // --- 2. Conditional GSTIN Field ---
-          if (_gstStatus == 'GST') ...[
-            TextFormField(
-              controller: _gstinController,
-              textCapitalization: TextCapitalization.characters,
-              maxLength: 15,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                letterSpacing: 2,
-                fontFamily: 'monospace',
-              ),
-              decoration: const InputDecoration(
-                labelText: 'GSTIN',
-                hintText: '22AAAAA0000A1Z5',
-                prefixIcon: Icon(Icons.verified_outlined),
-                counterText: '',
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // --- 3. Legal Business Name ---
           TextFormField(
             controller: _legalNameController,
             style: const TextStyle(color: AppColors.textPrimary),
             decoration: InputDecoration(
               labelText: 'Legal Business Name',
-              hintText: _gstStatus == 'GST'
-                  ? 'As per GST certificate'
-                  : 'Trade name/Owner name',
+              hintText: _gstStatus == 'GST' ? 'As per GST certificate' : 'Trade name/Owner name',
               prefixIcon: const Icon(Icons.business),
             ),
             onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 24),
-
-          // --- 4. Document Upload (Only for GST) ---
+          const SizedBox(height: 16),
           if (_gstStatus == 'GST') ...[
-            Text(
-              'Upload GST Certificate',
-              style: AppTextStyles.labelLarge.copyWith(
-                color: AppColors.textPrimary,
-              ),
+            TextFormField(
+              controller: _gstinController,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 15,
+              style: const TextStyle(color: AppColors.textPrimary, letterSpacing: 2, fontFamily: 'monospace'),
+              decoration: const InputDecoration(labelText: 'GSTIN', hintText: '22AAAAA0000A1Z5', prefixIcon: Icon(Icons.verified_outlined), counterText: ''),
+              onChanged: (_) => setState(() {}),
             ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _panController,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 10,
+              style: const TextStyle(color: AppColors.textPrimary, letterSpacing: 2, fontFamily: 'monospace'),
+              decoration: const InputDecoration(labelText: 'PAN Number', hintText: 'ABCDE1234F', prefixIcon: Icon(Icons.badge_outlined), counterText: ''),
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+          if (_gstStatus == 'NON-GST') ...[
+            const SizedBox(height: 8),
+            Text('Upload Documentation', style: AppTextStyles.labelLarge.copyWith(color: AppColors.textPrimary)),
             const SizedBox(height: 8),
             InkWell(
-              onTap: () {
-                _pickFile(); // Call the file picker function
-              },
+              onTap: _pickFile,
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 20),
+                padding: const EdgeInsets.symmetric(vertical: 24),
                 decoration: BoxDecoration(
-                  border: Border.all(
-                    color: AppColors.textSecondary.withOpacity(0.3),
-                  ),
+                  border: Border.all(color: AppColors.textSecondary.withOpacity(0.3)),
                   borderRadius: BorderRadius.circular(12),
                   color: AppColors.surfaceVariant,
                 ),
                 child: Column(
                   children: [
-                    const Icon(
-                      Icons.cloud_upload_outlined,
-                      color: AppColors.primary,
-                    ),
+                    Icon(_verificationFile != null ? Icons.check_circle : Icons.cloud_upload_outlined, color: _verificationFile != null ? AppColors.success : AppColors.primary),
                     const SizedBox(height: 8),
-                    Text(
-                      'Tap to upload PDF or Image',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
+                    Text(_verificationFile != null ? _verificationFile!.name : 'Tap to upload documentation', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 24),
           ],
-
-          // --- 5. Info Box ---
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.info.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.info_outline, color: AppColors.info, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Information',
-                      style: AppTextStyles.labelLarge.copyWith(
-                        color: AppColors.info,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _gstStatus == 'GST'
-                      ? '• Enables proper tax invoicing\n• Required for platform settlement'
-                      : '• You can update to GST details later\n• Business name must match bank account',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 24),
-
-          // --- 6. Consent Checkbox (Only for GST) ---
+          _buildInfoBox(),
+          const SizedBox(height: 24),
           if (_gstStatus == 'GST')
             InkWell(
               onTap: () => setState(() => _gstConsent = !_gstConsent),
@@ -609,20 +436,8 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
                   children: [
-                    Checkbox(
-                      value: _gstConsent,
-                      onChanged: (value) =>
-                          setState(() => _gstConsent = value ?? false),
-                      activeColor: AppColors.primary,
-                    ),
-                    Expanded(
-                      child: Text(
-                        'I confirm that the GST details provided are accurate.',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
+                    Checkbox(value: _gstConsent, onChanged: (value) => setState(() => _gstConsent = value ?? false), activeColor: AppColors.primary),
+                    Expanded(child: Text('I confirm that the GST details provided are accurate.', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary))),
                   ],
                 ),
               ),
@@ -638,135 +453,67 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Commercial Setup',
-            style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
-          ),
+          Text('Commercial Setup', style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary)),
           const SizedBox(height: 8),
-          Text(
-            'Choose your discount and settlement preferences',
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
+          Text('Choose your discount and settlement preferences', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 24),
-
-          Text(
-            'Discount Slab',
-            style: AppTextStyles.labelLarge.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
+          Text('Discount Slab', style: AppTextStyles.labelLarge.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 8),
-          Text(
-            'Higher discounts attract more customers',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textHint),
-          ),
+          Text('Higher discounts attract more customers', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textHint)),
           const SizedBox(height: 12),
+          Row(children: [3, 6, 9].map((val) => _buildDiscountOption(val)).toList()),
+          const SizedBox(height: 24),
+          Text('Settlement Mode', style: AppTextStyles.labelLarge.copyWith(color: AppColors.textSecondary)),
+          const SizedBox(height: 12),
+          _buildSettlementOption('PLATFORM', 'Platform Settlement', 'Funds settled within T+1 day', Icons.account_balance),
+          const SizedBox(height: 12),
+          _buildSettlementOption('DIRECT', 'Direct Settlement', 'Razorpay settles directly', Icons.flash_on),
+          const SizedBox(height: 24),
+          _buildPlatformFeeInfo(),
+          const SizedBox(height: 24),
+          _buildTotalSummary(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlatformFeeInfo() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppColors.surfaceVariant, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
+      child: Column(
+        children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildDiscountOption(3),
-              const SizedBox(width: 12),
-              _buildDiscountOption(6),
-              const SizedBox(width: 12),
-              _buildDiscountOption(9),
+              Text('Platform Fee', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+              Text('1% per transaction', style: AppTextStyles.bodyLarge.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
+          Text('Platform fee is deducted from the discounted amount you receive.', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textHint)),
+        ],
+      ),
+    );
+  }
 
-          Text(
-            'Settlement Mode',
-            style: AppTextStyles.labelLarge.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
+  Widget _buildTotalSummary() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.partnerAccent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.partnerAccent.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Summary', style: AppTextStyles.labelLarge.copyWith(color: AppColors.partnerAccent)),
           const SizedBox(height: 12),
-          _buildSettlementOption(
-            'PLATFORM',
-            'Platform Settlement',
-            'Funds settled to your bank account within T+1 day',
-            Icons.account_balance,
-          ),
-          const SizedBox(height: 12),
-          _buildSettlementOption(
-            'DIRECT',
-            'Direct Settlement',
-            'Razorpay settles directly (requires Razorpay account)',
-            Icons.flash_on,
-          ),
-          const SizedBox(height: 24),
-
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Platform Fee',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      '1% per transaction',
-                      style: AppTextStyles.bodyLarge.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Platform fee is deducted from the discounted amount you receive.',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textHint,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.partnerAccent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.partnerAccent.withValues(alpha: 0.3),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Summary',
-                  style: AppTextStyles.labelLarge.copyWith(
-                    color: AppColors.partnerAccent,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildSummaryRow('Business', _businessNameController.text),
-                _buildSummaryRow(
-                  'Category',
-                  _getCategoryLabel(_selectedCategory),
-                ),
-                _buildSummaryRow('Discount', '$_selectedDiscountSlab%'),
-                _buildSummaryRow(
-                  'Settlement',
-                  _settlementMode == 'PLATFORM' ? 'Platform (T+1)' : 'Direct',
-                ),
-              ],
-            ),
-          ),
+          _buildSummaryRow('Business', _businessNameController.text),
+          _buildSummaryRow('Category', _getCategoryLabel(_selectedCategory)),
+          _buildSummaryRow('Discount', '$_selectedDiscountSlab%'),
+          _buildSummaryRow('Settlement', _settlementMode == 'PLATFORM' ? 'Platform (T+1)' : 'Direct'),
         ],
       ),
     );
@@ -776,100 +523,38 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
     final isSelected = _selectedDiscountSlab == percent;
     return Expanded(
       child: Material(
-        color: isSelected
-            ? AppColors.primary.withValues(alpha: 0.15)
-            : AppColors.surfaceVariant,
+        color: isSelected ? AppColors.primary.withValues(alpha: 0.15) : AppColors.surfaceVariant,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: () => setState(() => _selectedDiscountSlab = percent),
           borderRadius: BorderRadius.circular(12),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected ? AppColors.primary : AppColors.border,
-                width: isSelected ? 2 : 1,
-              ),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  '$percent%',
-                  style: AppTextStyles.h2.copyWith(
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'OFF',
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: isSelected ? AppColors.primary : AppColors.border, width: isSelected ? 2 : 1)),
+            child: Column(children: [Text('$percent%', style: AppTextStyles.h2.copyWith(color: isSelected ? AppColors.primary : AppColors.textPrimary)), Text('OFF', style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary))]),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildSettlementOption(
-    String value,
-    String title,
-    String description,
-    IconData icon,
-  ) {
+  Widget _buildSettlementOption(String value, String title, String description, IconData icon) {
     final isSelected = _settlementMode == value;
     return Material(
-      color: isSelected
-          ? AppColors.primary.withValues(alpha: 0.1)
-          : AppColors.surfaceVariant,
+      color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.surfaceVariant,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () => setState(() => _settlementMode = value),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.border,
-            ),
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: isSelected ? AppColors.primary : AppColors.border)),
           child: Row(
             children: [
-              Icon(
-                icon,
-                color: isSelected ? AppColors.primary : AppColors.textSecondary,
-                size: 24,
-              ),
+              Icon(icon, color: isSelected ? AppColors.primary : AppColors.textSecondary, size: 24),
               const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppTextStyles.bodyLarge.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      description,
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (isSelected)
-                Icon(Icons.check_circle, color: AppColors.primary, size: 20),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: AppTextStyles.bodyLarge.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w600)), Text(description, style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary))])),
+              if (isSelected) const Icon(Icons.check_circle, color: AppColors.primary, size: 20),
             ],
           ),
         ),
@@ -883,16 +568,28 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: AppTextStyles.bodySmall.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-          Text(
-            value.isEmpty ? '-' : value,
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textPrimary,
+          Text(label, style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+          Text(value.isEmpty ? '-' : value, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoBox() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppColors.info.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.info.withValues(alpha: 0.3))),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: AppColors.info, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _gstStatus == 'GST'
+                  ? '• GSTIN and PAN must belong to same entity\n• Enables proper tax invoicing'
+                  : '• Documentation is required for Non-GST verification\n• Business name must match bank account',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
             ),
           ),
         ],
@@ -902,45 +599,26 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
 
   String _getCategoryLabel(String category) {
     switch (category) {
-      case 'FOOD':
-        return 'Food & Dining';
-      case 'STAY':
-        return 'Hotel & Stay';
-      case 'SERVICE':
-        return 'Services';
-      case 'RETAIL':
-        return 'Retail';
-      default:
-        return category;
+      case 'FOOD': return 'Food & Dining';
+      case 'STAY': return 'Hotel & Stay';
+      case 'SERVICE': return 'Services';
+      case 'RETAIL': return 'Retail';
+      default: return category;
     }
   }
 
   Widget _buildBottomAction() {
     final isValid = _validateCurrentStep();
-    final isLastStep = _currentStep == 2;
-
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border)),
-      ),
+      decoration: BoxDecoration(color: AppColors.surface, border: Border(top: BorderSide(color: AppColors.border))),
       child: SafeArea(
         top: false,
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
             onPressed: isValid && !_isLoading ? _nextStep : null,
-            child: _isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Text(isLastStep ? 'Complete Registration' : 'Continue'),
+            child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text(_currentStep == 2 ? 'Complete Registration' : 'Continue'),
           ),
         ),
       ),
