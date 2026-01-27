@@ -7,7 +7,10 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+<<<<<<< HEAD
+=======
     "postinstall": "npm run build",
+>>>>>>> origin/feature/partner-onboarding-v2
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix"
   },
@@ -34,8 +37,12 @@
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.6",
     "uuid": "^11.0.3",
+<<<<<<< HEAD
+    "zod": "^3.24.1"
+=======
     "zod": "^3.24.1",
     "typescript": "^5.7.2"
+>>>>>>> origin/feature/partner-onboarding-v2
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -49,10 +56,18 @@
     "@typescript-eslint/eslint-plugin": "^8.18.2",
     "@typescript-eslint/parser": "^8.18.2",
     "eslint": "^9.17.0",
+<<<<<<< HEAD
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+=======
     "tsx": "^4.21.0"
   },
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
+>>>>>>> origin/feature/partner-onboarding-v2
   }
 }

@@ -11,10 +11,14 @@ import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
+<<<<<<< HEAD
+import paymentRoutes from './routes/payment.routes.js';
+=======
 import healthRouter from './routes/health';
 
 // ============== App Initialization ==============
 // Initialize Express app
+>>>>>>> origin/feature/partner-onboarding-v2
 
 // Initialize Express app
 const app: Express = express();
@@ -39,6 +43,12 @@ if (env.NODE_ENV !== 'test') {
   app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 }
 
+<<<<<<< HEAD
+// Body parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+=======
 
 // Razorpay webhook needs raw body (IMPORTANT)
 app.use(
@@ -51,6 +61,7 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api', healthRouter);
+>>>>>>> origin/feature/partner-onboarding-v2
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
 
@@ -58,6 +69,10 @@ app.set('trust proxy', 1);
 
 // API routes
 app.use('/api', routes);
+<<<<<<< HEAD
+app.use('/api/payment', paymentRoutes);
+=======
+>>>>>>> origin/feature/partner-onboarding-v2
 
 // Root endpoint
 app.get('/', (_, res) => {
@@ -91,8 +106,13 @@ const startServer = async (): Promise<void> => {
 ║                                                       ║
 ║   🚀 Travellers Triibe API Server                     ║
 ║                                                       ║
+<<<<<<< HEAD
+║   Environment: ${env.NODE_ENV.padEnd(38)}             ║
+║   Port: ${String(env.PORT).padEnd(46)}                ║
+=======
 ║   Environment: ${env.NODE_ENV.padEnd(38)}║
 ║   Port: ${String(env.PORT).padEnd(46)}║
+>>>>>>> origin/feature/partner-onboarding-v2
 ║   URL: http://localhost:${String(env.PORT).padEnd(30)}║
 ║                                                       ║
 ╚═══════════════════════════════════════════════════════╝
@@ -103,9 +123,13 @@ const startServer = async (): Promise<void> => {
     process.exit(1);
   }
 };
+<<<<<<< HEAD
+// ============== Graceful Shutdown ==============
+=======
 
 // ============== Graceful Shutdown ==============
 
+>>>>>>> origin/feature/partner-onboarding-v2
 const gracefulShutdown = async (signal: string): Promise<void> => {
   console.log(`\n📡 Received ${signal}. Shutting down gracefully...`);
 
@@ -118,7 +142,10 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
     process.exit(1);
   }
 };
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/feature/partner-onboarding-v2
 // Handle shutdown signals
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
@@ -135,5 +162,9 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Start the server
 startServer();
+<<<<<<< HEAD
+export default app;
+=======
 
 export default app;
+>>>>>>> origin/feature/partner-onboarding-v2

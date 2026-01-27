@@ -7,9 +7,12 @@ async function activatePartner() {
   try {
     await mongoose.connect(process.env.MONGODB_URI!);
     console.log('Connected to MongoDB');
+<<<<<<< HEAD
+=======
     if (!mongoose.connection.db) {
             throw new Error('Database connection not established');
         }
+>>>>>>> origin/feature/partner-onboarding-v2
 
     const result = await mongoose.connection.db.collection('partners').updateOne(
       { _id: new mongoose.Types.ObjectId('6952b07ac09177bde30f24cd') },

@@ -1,5 +1,9 @@
 /**
+<<<<<<< HEAD
+ * Environment configuration with validation
+=======
  * Environment configuration with validation-env.ts
+>>>>>>> origin/feature/partner-onboarding-v2
  */
 import dotenv from 'dotenv';
 import { z } from 'zod';
@@ -17,7 +21,11 @@ const envSchema = z.object({
   MONGODB_URI: z.string().min(1, 'MongoDB URI is required'),
 
   // Firebase Auth
+<<<<<<< HEAD
+  FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('./travellers-triibe-firebase-adminsdk-fbsvc-c5f6474fd0.json'),
+=======
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('./travellers-triibe-firebase-adminsdk-fbsvc-715ff03ea8.json'),
+>>>>>>> origin/feature/partner-onboarding-v2
 
   // Supabase (for storage/realtime) - truly optional
   SUPABASE_URL: z.string().url().optional().or(z.literal('')),

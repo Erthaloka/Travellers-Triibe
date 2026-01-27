@@ -201,15 +201,54 @@ router.post(
       throw new ApiError(400, 'Missing signature');
     }
 
+<<<<<<< HEAD
+    // Verify webhook signature
+    const isValid = verifyWebhookSignature(
+      JSON.stringify(req.body),
+      signature
+    );
+
+=======
         //  Store raw body ONCE...
     const rawBody = req.body.toString();
 
     //  Verify signature first...
     const isValid = verifyWebhookSignature(rawBody, signature);
+>>>>>>> origin/feature/partner-onboarding-v2
     if (!isValid) {
       throw new ApiError(400, 'Invalid webhook signature');
     }
 
+<<<<<<< HEAD
+    const { event, payload } = req.body;
+
+    switch (event) {
+      case 'payment.captured': {
+        const { payment } = payload;
+        const razorpayOrderId = payment.entity.order_id;
+
+        // Find and update order
+        const order = await Order.findOne({ razorpayOrderId });
+        if (order && order.status === OrderStatus.PENDING) {
+          await order.markCompleted(
+            payment.entity.id,
+            '' // Webhook doesn't provide signature
+          );
+        }
+        break;
+      }
+
+      case 'payment.failed': {
+        const { payment } = payload;
+        const razorpayOrderId = payment.entity.order_id;
+
+        const order = await Order.findOne({ razorpayOrderId });
+        if (order && order.status === OrderStatus.PENDING) {
+          await order.markFailed(payment.entity.error_description);
+        }
+        break;
+      }
+=======
     //  Parse only AFTER verification...
     const payloadBody = JSON.parse(rawBody);
     const { event, payload } = payloadBody;
@@ -245,6 +284,7 @@ router.post(
 }
 
 
+>>>>>>> origin/feature/partner-onboarding-v2
 
       case 'refund.created': {
         const { refund } = payload;

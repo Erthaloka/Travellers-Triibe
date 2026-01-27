@@ -1,5 +1,9 @@
 /**
+<<<<<<< HEAD
+ * Partner model - represents business/merchant partners
+=======
  * Partner model - represents business/merchant partners-Partner.ts
+>>>>>>> origin/feature/partner-onboarding-v2
  */
 import mongoose, { Document, Schema } from 'mongoose';
 

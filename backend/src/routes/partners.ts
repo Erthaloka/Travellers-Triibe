@@ -1,6 +1,9 @@
 /**
  * Partner routes - Business onboarding and management
+<<<<<<< HEAD
+=======
  * UPDATED: Added auto-approve option for development
+>>>>>>> origin/feature/partner-onboarding-v2
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
@@ -13,7 +16,11 @@ import { env } from '../config/env.js';
 
 const router = Router();
 
+<<<<<<< HEAD
+/* ================= Validation Schemas ================= */
+=======
 // ============== Validation Schemas ==============
+>>>>>>> origin/feature/partner-onboarding-v2
 
 const onboardingSchema = z.object({
   businessName: z.string().min(2, 'Business name is required'),
@@ -48,6 +55,48 @@ const partnerIdSchema = z.object({
   id: z.string().regex(/^[a-fA-F0-9]{24}$/, 'Invalid partner ID'),
 });
 
+<<<<<<< HEAD
+/* ================= Routes ================= */
+
+/**
+ * GET /api/partners/onboarding-status
+ * Check if user needs to complete onboarding
+ * Returns: { needsOnboarding: boolean, hasPartnerRole: boolean, profile: Partner | null }
+ */
+router.get(
+  '/onboarding-status',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const hasPartnerRole = req.user!.roles.includes(UserRole.PARTNER);
+    
+    if (!hasPartnerRole) {
+      return res.json({
+        success: true,
+        data: {
+          needsOnboarding: false,
+          hasPartnerRole: false,
+          profile: null,
+        },
+      });
+    }
+
+    const partner = await Partner.findOne({ userId: req.user!._id });
+
+    res.json({
+      success: true,
+      data: {
+        needsOnboarding: !partner,
+        hasPartnerRole: true,
+        profile: partner,
+      },
+    });
+  })
+);
+
+/**
+ * POST /api/partners/onboard
+ * Create partner business profile
+=======
 // ============== Routes ==============
 
 /**
@@ -55,6 +104,7 @@ const partnerIdSchema = z.object({
  * Complete partner onboarding (creates partner profile and adds role)
  * 
  * ✅ UPDATED: Auto-approve for development (set AUTO_APPROVE_PARTNERS=true in env)
+>>>>>>> origin/feature/partner-onboarding-v2
  */
 router.post(
   '/onboard',
@@ -63,6 +113,32 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!._id;
 
+<<<<<<< HEAD
+    // Check if already onboarded
+    const existing = await Partner.findOne({ userId });
+    if (existing) {
+      throw new ApiError(409, 'Partner profile already exists');
+    }
+
+    // Create partner profile (DEV MODE - auto-approve)
+    const partner = await Partner.create({
+      userId,
+      ...req.body,
+      status: PartnerStatus.ACTIVE, // 🔥 DEV: Auto-approve
+      isVerified: true,
+      verifiedAt: new Date(),
+    });
+
+    // Add PARTNER role if not present
+    if (!req.user!.roles.includes(UserRole.PARTNER)) {
+      await User.findByIdAndUpdate(userId, {
+        $addToSet: { roles: UserRole.PARTNER },
+      });
+    }
+
+    // Generate QR code data
+    partner.qrCodeData = JSON.stringify({
+=======
     // Check if partner profile already exists
     let partner = await Partner.findOne({ userId });
 
@@ -107,26 +183,44 @@ router.post(
 
     // Generate QR code data
     const qrData = JSON.stringify({
+>>>>>>> origin/feature/partner-onboarding-v2
       partnerId: partner._id,
       businessName: partner.businessName,
       discountRate: partner.discountRate,
     });
 
+<<<<<<< HEAD
+=======
     partner.qrCodeData = qrData;
+>>>>>>> origin/feature/partner-onboarding-v2
     await partner.save();
 
     res.status(201).json({
       success: true,
       data: partner,
+<<<<<<< HEAD
+      message: 'Partner onboarded successfully',
+=======
       message: autoApprove 
         ? 'Partner registration approved! You can now start accepting payments.'
         : 'Partner onboarding submitted. Awaiting verification.',
+>>>>>>> origin/feature/partner-onboarding-v2
     });
   })
 );
 
 /**
  * GET /api/partners/profile
+<<<<<<< HEAD
+ * Get current partner profile
+ * ⚠️ Only authenticate - don't require partner profile to exist yet
+ */
+router.get(
+  '/profile',
+  authenticate, //  Only check if user is logged in
+  asyncHandler(async (req: Request, res: Response) => {
+    const partner = await Partner.findOne({ userId: req.user!._id }).populate(
+=======
  * Get current partner's profile
  */
 router.get(
@@ -137,10 +231,23 @@ router.get(
     const userId = req.user!._id;
 
     const partner = await Partner.findOne({ userId }).populate(
+>>>>>>> origin/feature/partner-onboarding-v2
       'userId',
       'name email phone'
     );
 
+<<<<<<< HEAD
+    // Return null if no profile exists (user hasn't onboarded yet)
+    if (!partner) {
+      return res.json({
+        success: true,
+        data: null,
+        message: 'Partner profile not found. Please complete onboarding.',
+      });
+    }
+
+    res.json({ success: true, data: partner });
+=======
     if (!partner) {
       throw new ApiError(404, 'Partner profile not found');
     }
@@ -149,6 +256,7 @@ router.get(
       success: true,
       data: partner,
     });
+>>>>>>> origin/feature/partner-onboarding-v2
   })
 );
 
@@ -159,6 +267,13 @@ router.get(
 router.put(
   '/profile',
   authenticate,
+<<<<<<< HEAD
+  requirePartner, // ✅ Now require partner profile to exist
+  validateBody(updateProfileSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const partner = await Partner.findOneAndUpdate(
+      { userId: req.user!._id },
+=======
   requirePartner,
   validateBody(updateProfileSchema),
   asyncHandler(async (req: Request, res: Response) => {
@@ -166,6 +281,7 @@ router.put(
 
     const partner = await Partner.findOneAndUpdate(
       { userId },
+>>>>>>> origin/feature/partner-onboarding-v2
       { $set: req.body },
       { new: true, runValidators: true }
     );
@@ -174,25 +290,38 @@ router.put(
       throw new ApiError(404, 'Partner profile not found');
     }
 
+<<<<<<< HEAD
+    res.json({ success: true, data: partner });
+=======
     res.json({
       success: true,
       data: partner,
     });
+>>>>>>> origin/feature/partner-onboarding-v2
   })
 );
 
 /**
  * GET /api/partners/qr-code
+<<<<<<< HEAD
+ * Generate QR code for partner payments
+=======
  * Generate QR code for partner
+>>>>>>> origin/feature/partner-onboarding-v2
  */
 router.get(
   '/qr-code',
   authenticate,
   requirePartner,
   asyncHandler(async (req: Request, res: Response) => {
+<<<<<<< HEAD
+    const partner = await Partner.findOne({ userId: req.user!._id });
+    
+=======
     const userId = req.user!._id;
 
     const partner = await Partner.findOne({ userId });
+>>>>>>> origin/feature/partner-onboarding-v2
     if (!partner) {
       throw new ApiError(404, 'Partner profile not found');
     }
@@ -201,7 +330,11 @@ router.get(
       throw new ApiError(403, 'Partner account is not active');
     }
 
+<<<<<<< HEAD
+    // Generate QR code data
+=======
     // Generate QR code with partner payment data
+>>>>>>> origin/feature/partner-onboarding-v2
     const qrData = {
       type: 'TT_PAYMENT',
       partnerId: partner._id,
@@ -210,7 +343,11 @@ router.get(
       timestamp: Date.now(),
     };
 
+<<<<<<< HEAD
+    const qrCode = await QRCode.toDataURL(JSON.stringify(qrData), {
+=======
     const qrCodeDataUrl = await QRCode.toDataURL(JSON.stringify(qrData), {
+>>>>>>> origin/feature/partner-onboarding-v2
       errorCorrectionLevel: 'M',
       width: 300,
       margin: 2,
@@ -218,10 +355,14 @@ router.get(
 
     res.json({
       success: true,
+<<<<<<< HEAD
+      data: { qrCode, qrData },
+=======
       data: {
         qrCode: qrCodeDataUrl,
         qrData,
       },
+>>>>>>> origin/feature/partner-onboarding-v2
     });
   })
 );
@@ -235,13 +376,23 @@ router.get(
   authenticate,
   requirePartner,
   asyncHandler(async (req: Request, res: Response) => {
+<<<<<<< HEAD
+    const partner = await Partner.findOne({ userId: req.user!._id });
+    
+=======
     const userId = req.user!._id;
 
     const partner = await Partner.findOne({ userId });
+>>>>>>> origin/feature/partner-onboarding-v2
     if (!partner) {
       throw new ApiError(404, 'Partner profile not found');
     }
 
+<<<<<<< HEAD
+    res.json({
+      success: true,
+      data: partner.analytics,
+=======
     // Get date ranges
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -300,11 +451,16 @@ router.get(
         peakHours: weeklyTrend,
         discountRate: partner.discountRate,
       },
+>>>>>>> origin/feature/partner-onboarding-v2
     });
   })
 );
 
+<<<<<<< HEAD
+/* ================= Public Routes ================= */
+=======
 // ============== Public Routes ==============
+>>>>>>> origin/feature/partner-onboarding-v2
 
 /**
  * GET /api/partners/:id/public
@@ -335,11 +491,19 @@ router.get(
   })
 );
 
+<<<<<<< HEAD
+/* ================= Admin Routes ================= */
+
+/**
+ * GET /api/partners/admin/pending
+ * Get pending partner applications
+=======
 // ============== Admin Routes ==============
 
 /**
  * GET /api/partners/admin/pending
  * Get pending partner applications (Admin only)
+>>>>>>> origin/feature/partner-onboarding-v2
  */
 router.get(
   '/admin/pending',
@@ -359,7 +523,11 @@ router.get(
 
 /**
  * PUT /api/partners/admin/:id/verify
+<<<<<<< HEAD
+ * Verify or reject partner application
+=======
  * Verify or reject partner application (Admin only)
+>>>>>>> origin/feature/partner-onboarding-v2
  */
 router.put(
   '/admin/:id/verify',
@@ -368,7 +536,11 @@ router.put(
   validateParams(partnerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+<<<<<<< HEAD
+    const { approved, reason } = req.body;
+=======
     const { approved, reason: _reason } = req.body;
+>>>>>>> origin/feature/partner-onboarding-v2
 
     const partner = await Partner.findById(id);
     if (!partner) {
@@ -381,7 +553,14 @@ router.put(
       partner.verifiedAt = new Date();
     } else {
       partner.status = PartnerStatus.REJECTED;
+<<<<<<< HEAD
+      // Store rejection reason in description or metadata
+      if (reason) {
+        partner.description = `Rejected: ${reason}`;
+      }
+=======
       // Could store rejection reason (_reason) in metadata
+>>>>>>> origin/feature/partner-onboarding-v2
     }
 
     await partner.save();
@@ -389,7 +568,11 @@ router.put(
     res.json({
       success: true,
       data: partner,
+<<<<<<< HEAD
+      message: approved ? 'Partner verified successfully' : 'Partner rejected',
+=======
       message: approved ? 'Partner verified' : 'Partner rejected',
+>>>>>>> origin/feature/partner-onboarding-v2
     });
   })
 );

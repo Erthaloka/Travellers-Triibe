@@ -19,7 +19,11 @@ const signupSchema = z.object({
   email: z.string().email('Invalid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   phone: z.string().regex(/^\+91[6-9]\d{9}$/, 'Invalid Indian phone number'),
+<<<<<<< HEAD
+  role: z.string().transform(val => val.toLowerCase()).pipe(z.enum(['user', 'partner'])).default('user'),
+=======
   // Remove role from signup - users are always created as USER role initially
+>>>>>>> origin/feature/partner-onboarding-v2
 });
 
 const loginSchema = z.object({
@@ -29,9 +33,15 @@ const loginSchema = z.object({
 
 const firebaseAuthSchema = z.object({
   idToken: z.string().min(1, 'Firebase ID token is required'),
+<<<<<<< HEAD
+  email: z.string().email().optional(), // For Google access token fallback
+  name: z.string().optional(), // For Google access token fallback
+  role: z.string().transform(val => val.toLowerCase()).pipe(z.enum(['user', 'partner'])).optional(),
+=======
   email: z.string().email().optional(),
   name: z.string().optional(),
   // Remove role from firebase auth too
+>>>>>>> origin/feature/partner-onboarding-v2
 });
 
 // ============== Routes ==============
@@ -44,7 +54,11 @@ router.post(
   '/signup',
   validateBody(signupSchema),
   asyncHandler(async (req: Request, res: Response) => {
+<<<<<<< HEAD
+    const { name, email, password, phone, role } = req.body;
+=======
     const { name, email, password, phone } = req.body;
+>>>>>>> origin/feature/partner-onboarding-v2
 
     // Check if email or phone already exists
     const existingUser = await User.findOne({
@@ -61,13 +75,26 @@ router.post(
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
 
+<<<<<<< HEAD
+    // Determine roles
+    const roles = role === 'partner'
+      ? [UserRole.PARTNER, UserRole.USER]
+      : [UserRole.USER];
+
+    // Create user
+=======
     // Create user with USER role only (they become PARTNER after onboarding)
+>>>>>>> origin/feature/partner-onboarding-v2
     const user = await User.create({
       name,
       email: email.toLowerCase(),
       phone,
       passwordHash,
+<<<<<<< HEAD
+      roles,
+=======
       roles: [UserRole.USER],
+>>>>>>> origin/feature/partner-onboarding-v2
       status: AccountStatus.ACTIVE,
     });
 
@@ -137,13 +164,21 @@ router.post(
 /**
  * Verify Google access token using Google's tokeninfo endpoint
  */
+<<<<<<< HEAD
+async function verifyGoogleAccessToken(accessToken: string): Promise<{ email: string; name?: string; picture?: string } | null> {
+=======
 async function verifyGoogleAccessToken(accessToken: string): Promise<{ email?: string; name?: string; picture?: string } | null> {
+>>>>>>> origin/feature/partner-onboarding-v2
   try {
     const response = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) return null;
+<<<<<<< HEAD
+    const data = await response.json();
+=======
     const data = await response.json() as { email?: string; name?: string; picture?: string };
+>>>>>>> origin/feature/partner-onboarding-v2
     return {
       email: data.email,
       name: data.name,
@@ -162,7 +197,11 @@ router.post(
   '/firebase',
   validateBody(firebaseAuthSchema),
   asyncHandler(async (req: Request, res: Response) => {
+<<<<<<< HEAD
+    const { idToken, email: providedEmail, name: providedName, role } = req.body;
+=======
     const { idToken, email: providedEmail, name: providedName } = req.body;
+>>>>>>> origin/feature/partner-onboarding-v2
 
     let email: string | undefined;
     let name: string | undefined;
@@ -183,12 +222,20 @@ router.post(
         email = googleUser.email;
         name = googleUser.name;
         picture = googleUser.picture;
+<<<<<<< HEAD
+        uid = `google_${email}`; // Generate a pseudo-UID for Google-only auth
+=======
         uid = email ? `google_${email}` : undefined;
+>>>>>>> origin/feature/partner-onboarding-v2
       } else if (providedEmail) {
         // Fallback to provided email/name (for web where we can't verify)
         email = providedEmail;
         name = providedName;
+<<<<<<< HEAD
+        uid = `web_${email}`;
+=======
         uid = email ? `web_${email}` : undefined;
+>>>>>>> origin/feature/partner-onboarding-v2
       } else {
         throw new ApiError(401, 'Invalid authentication token');
       }
@@ -203,6 +250,20 @@ router.post(
     let isNewUser = false;
 
     if (!user) {
+<<<<<<< HEAD
+      // Create new user
+      isNewUser = true;
+      const roles = role === 'partner'
+        ? [UserRole.PARTNER, UserRole.USER]
+        : [UserRole.USER];
+
+      user = await User.create({
+        email: email.toLowerCase(),
+        phone: `+91${Math.floor(9000000000 + Math.random() * 999999999)}`, // Temp phone
+        name: name || email.split('@')[0],
+        supabaseId: uid,
+        roles,
+=======
       // Create new user with USER role (they become PARTNER after onboarding)
       isNewUser = true;
       const tempPhone = `+91${Math.floor(9000000000 + Math.random() * 999999999)}`;
@@ -213,6 +274,7 @@ router.post(
         name: name || email.split('@')[0],
         supabaseId: uid,
         roles: [UserRole.USER],
+>>>>>>> origin/feature/partner-onboarding-v2
         status: AccountStatus.ACTIVE,
         avatar: picture,
       });
@@ -244,7 +306,12 @@ router.post(
   '/google',
   validateBody(firebaseAuthSchema),
   asyncHandler(async (req: Request, res: Response) => {
+<<<<<<< HEAD
+    // Forward to Firebase auth handler
+    const { idToken, role } = req.body;
+=======
     const { idToken } = req.body;
+>>>>>>> origin/feature/partner-onboarding-v2
 
     const decodedToken = await verifyFirebaseToken(idToken);
     const { uid, email, name, picture } = decodedToken;
@@ -258,6 +325,18 @@ router.post(
 
     if (!user) {
       isNewUser = true;
+<<<<<<< HEAD
+      const roles = role === 'partner'
+        ? [UserRole.PARTNER, UserRole.USER]
+        : [UserRole.USER];
+
+      user = await User.create({
+        email: email.toLowerCase(),
+        phone: `+91${Math.floor(9000000000 + Math.random() * 999999999)}`,
+        name: name || 'User',
+        googleId: uid,
+        roles,
+=======
       const tempPhone = `+91${Math.floor(9000000000 + Math.random() * 999999999)}`;
 
       user = await User.create({
@@ -266,6 +345,7 @@ router.post(
         name: name || 'User',
         googleId: uid,
         roles: [UserRole.USER],
+>>>>>>> origin/feature/partner-onboarding-v2
         status: AccountStatus.ACTIVE,
         avatar: picture,
       });
@@ -351,4 +431,8 @@ router.post(
   })
 );
 
+<<<<<<< HEAD
 export default router;
+=======
+export default router;
+>>>>>>> origin/feature/partner-onboarding-v2
