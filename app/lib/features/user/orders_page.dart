@@ -148,7 +148,8 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
   }
 
   Widget _buildOrderCard(Map<String, dynamic> order) {
-    final orderId = order['orderId'] ?? order['id'] ?? 'Unknown';
+    // ✅ FIXED: Use orderId field directly (TT-XXXXXX format)
+    final orderId = order['orderId'] as String? ?? 'Unknown';
     final partner = order['partnerId'];
     final merchantName = partner?['businessName'] ?? 'Unknown Merchant';
     final category = partner?['category'] ?? 'OTHER';
@@ -162,6 +163,7 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () {
+          // ✅ FIXED: Now passing correct orderId (TT-XXXXXX)
           context.go('/user/orders/$orderId');
         },
         borderRadius: BorderRadius.circular(12),

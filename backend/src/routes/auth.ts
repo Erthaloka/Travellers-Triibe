@@ -1,5 +1,5 @@
 /**
- * Authentication routes - Firebase Auth integration
+ * Authentication routes - Firebase Auth integration - auth.ts
  */
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';

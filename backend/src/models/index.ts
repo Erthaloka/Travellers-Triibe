@@ -1,5 +1,5 @@
 /**
- * Export all models
+ * Export all models - index.ts
  */
 export { User, IUser, UserRole, AccountStatus } from './User.js';
 export { Partner, IPartner, PartnerStatus, BusinessCategory } from './Partner.js';

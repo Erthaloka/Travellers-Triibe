@@ -1,5 +1,6 @@
-/// Partner onboarding flow - 3 step process
-library;
+/// Partner onboarding flow - 3 step process with GST/Non-GST support
+/// File: lib/features/partner/screens/partner_onboarding_page.dart
+/// UPDATED: Proper backend integration with verification flow
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -8,9 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/auth/auth_provider.dart';
-import '../../../core/config/constants.dart';
 import '../../../routes/app_router.dart';
-import '../../../core/network/api_endpoints.dart';
 
 /// Partner onboarding page with 3 steps
 class PartnerOnboardingPage extends StatefulWidget {
@@ -27,6 +26,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
 
   // Step 1: Business Details
   final _businessNameController = TextEditingController();
+  final _legalNameController = TextEditingController();
   final _addressLine1Controller = TextEditingController();
   String _selectedCategory = 'FOOD';
   final _cityController = TextEditingController();
@@ -34,10 +34,14 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
   final _pincodeController = TextEditingController();
 
   // Step 2: GST Verification
-  String _gstStatus = 'GST'; // ✅ Added to track dropdown state
+  String _gstStatus = 'NON-GST'; // Default to NON-GST
   final _gstinController = TextEditingController();
-  final _legalNameController = TextEditingController();
+  final _panController = TextEditingController();
   bool _gstConsent = false;
+  PlatformFile? _gstCertificate;
+  bool _isVerifying = false;
+  String? _verificationError;
+  bool _isGstVerified = false;
 
   // Step 3: Commercial Setup
   int _selectedDiscountSlab = 6;
@@ -47,12 +51,13 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
   void dispose() {
     _pageController.dispose();
     _businessNameController.dispose();
+    _legalNameController.dispose();
     _addressLine1Controller.dispose();
     _cityController.dispose();
     _stateController.dispose();
     _pincodeController.dispose();
     _gstinController.dispose();
-    _legalNameController.dispose();
+    _panController.dispose();
     super.dispose();
   }
 
@@ -84,19 +89,19 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
     switch (_currentStep) {
       case 0:
         return _businessNameController.text.isNotEmpty &&
+            _legalNameController.text.isNotEmpty &&
             _addressLine1Controller.text.isNotEmpty &&
             _cityController.text.isNotEmpty &&
             _stateController.text.isNotEmpty &&
             _pincodeController.text.length == 6;
       case 1:
-        // ✅ Updated Validation Logic
         if (_gstStatus == 'GST') {
           return _gstinController.text.length == 15 &&
-              _legalNameController.text.isNotEmpty &&
-              _gstConsent;
+              _panController.text.length == 10 &&
+              _gstConsent &&
+              _isGstVerified; // Must verify for GST
         } else {
-          // For Non-GST, only the Legal Business Name is required
-          return _legalNameController.text.isNotEmpty;
+          return _panController.text.length == 10;
         }
       case 2:
         return true;
@@ -106,24 +111,75 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
   }
 
   Future<void> _pickFile() async {
-    // Opens the native file explorer
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: [
-        'jpg',
-        'pdf',
-        'png',
-      ], // Filter specifically for your GST needs
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
     );
 
     if (result != null) {
-      // Mobile: You get a file path
-      // Web: You get file bytes (result.files.first.bytes)
-      PlatformFile file = result.files.first;
+      setState(() {
+        _gstCertificate = result.files.first;
+      });
+    }
+  }
 
-      print('Selected file: ${file.name}');
-    } else {
-      // User canceled the picker
+  Future<void> _verifyGSTDetails() async {
+    if (_gstinController.text.length != 15 ||
+        _panController.text.length != 10) {
+      setState(() {
+        _verificationError = 'Please enter valid GSTIN and PAN';
+      });
+      return;
+    }
+
+    setState(() {
+      _isVerifying = true;
+      _verificationError = null;
+      _isGstVerified = false;
+    });
+
+    try {
+      final authProvider = context.read<AuthProvider>();
+
+      final response = await authProvider.apiClient.post(
+        '/api/verification/verify-gst',
+        body: {
+          'gstin': _gstinController.text.trim().toUpperCase(),
+          'pan': _panController.text.trim().toUpperCase(),
+        },
+        requiresAuth: true,
+      );
+
+      if (!mounted) return;
+
+      if (response.success) {
+        setState(() {
+          _isVerifying = false;
+          _isGstVerified = true;
+          // Auto-fill legal name if returned
+          if (response.data?['data']?['legalName'] != null) {
+            _legalNameController.text = response.data!['data']['legalName'];
+          }
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('GST details verified successfully!'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } else {
+        throw Exception(response.error?.message ?? 'Verification failed');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isVerifying = false;
+        _isGstVerified = false;
+        _verificationError = e.toString().replaceAll('Exception: ', '');
+      });
     }
   }
 
@@ -133,27 +189,34 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
     try {
       final authProvider = context.read<AuthProvider>();
 
-      final response = await authProvider.apiClient.post(
-        ApiEndpoints.partnerOnboard,
-        body: {
-          'businessName': _businessNameController.text.trim(),
-          'legalBusinessName': _legalNameController.text.trim(), // ✅ Added
-          'category': _mapCategoryToBackend(_selectedCategory),
-          'businessPhone': authProvider.account?.phone ?? '',
-          'businessEmail': authProvider.account?.email ?? '',
-          'isGstRegistered': _gstStatus == 'GST', // ✅ Added
-          'address': {
-            'line1': _addressLine1Controller.text.trim(),
-            'city': _cityController.text.trim(),
-            'state': _stateController.text.trim(),
-            'pincode': _pincodeController.text.trim(),
-          },
-          'discountRate': _selectedDiscountSlab,
-          'gstNumber': _gstStatus == 'GST'
-              ? _gstinController.text.trim().toUpperCase()
-              : null, // ✅ Conditional
-          'panNumber': '',
+      // Prepare onboarding data
+      final onboardingData = {
+        'businessName': _businessNameController.text.trim(),
+        'legalBusinessName': _legalNameController.text.trim(),
+        'category': _mapCategoryToBackend(_selectedCategory),
+        'businessPhone': authProvider.account?.phone ?? '',
+        'businessEmail': authProvider.account?.email ?? '',
+        'isGstRegistered': _gstStatus == 'GST',
+        'panNumber': _panController.text.trim().toUpperCase(),
+        'address': {
+          'line1': _addressLine1Controller.text.trim(),
+          'city': _cityController.text.trim(),
+          'state': _stateController.text.trim(),
+          'pincode': _pincodeController.text.trim(),
         },
+        'discountRate': _selectedDiscountSlab,
+        'settlementMode': _settlementMode,
+      };
+
+      // Add GSTIN if GST registered
+      if (_gstStatus == 'GST') {
+        onboardingData['gstNumber'] = _gstinController.text.trim().toUpperCase();
+      }
+
+      // Submit onboarding
+      final response = await authProvider.apiClient.post(
+        '/api/partners/onboard',
+        body: onboardingData,
         requiresAuth: true,
       );
 
@@ -162,14 +225,14 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
       if (response.success) {
         await authProvider.refreshAccount();
         setState(() => _isLoading = false);
-        context.go(AppRoutes.partnerDashboard);
 
         if (mounted) {
+          context.go(AppRoutes.partnerDashboard);
+
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Partner registration submitted! Awaiting verification.',
-              ),
+            SnackBar(
+              content: Text(response.data?['message'] ??
+                  'Partner registration submitted!'),
               backgroundColor: AppColors.success,
             ),
           );
@@ -265,13 +328,13 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                     child: isCompleted
                         ? const Icon(Icons.check, color: Colors.white, size: 16)
                         : Text(
-                            '${index + 1}',
-                            style: AppTextStyles.labelLarge.copyWith(
-                              color: isCurrent
-                                  ? Colors.white
-                                  : AppColors.textSecondary,
-                            ),
-                          ),
+                      '${index + 1}',
+                      style: AppTextStyles.labelLarge.copyWith(
+                        color: isCurrent
+                            ? Colors.white
+                            : AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                 ),
                 if (index < 2)
@@ -308,19 +371,28 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             ),
           ),
           const SizedBox(height: 24),
-
           TextFormField(
             controller: _businessNameController,
             style: const TextStyle(color: AppColors.textPrimary),
             decoration: const InputDecoration(
-              labelText: 'Business Name',
+              labelText: 'Business Name *',
               hintText: 'Enter your business name',
               prefixIcon: Icon(Icons.store_outlined),
             ),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
-
+          TextFormField(
+            controller: _legalNameController,
+            style: const TextStyle(color: AppColors.textPrimary),
+            decoration: const InputDecoration(
+              labelText: 'Legal Business Name *',
+              hintText: 'As per registration documents',
+              prefixIcon: Icon(Icons.business),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 16),
           Text(
             'Business Category',
             style: AppTextStyles.labelLarge.copyWith(
@@ -343,7 +415,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             ],
           ),
           const SizedBox(height: 24),
-
           Text(
             'Business Address',
             style: AppTextStyles.labelLarge.copyWith(
@@ -351,31 +422,28 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             ),
           ),
           const SizedBox(height: 12),
-
           TextFormField(
             controller: _addressLine1Controller,
             style: const TextStyle(color: AppColors.textPrimary),
             decoration: const InputDecoration(
-              labelText: 'Street Address',
+              labelText: 'Street Address *',
               hintText: 'Building, Street name',
               prefixIcon: Icon(Icons.location_on_outlined),
             ),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
-
           TextFormField(
             controller: _cityController,
             style: const TextStyle(color: AppColors.textPrimary),
             decoration: const InputDecoration(
-              labelText: 'City',
+              labelText: 'City *',
               hintText: 'Enter city',
               prefixIcon: Icon(Icons.location_city),
             ),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
-
           Row(
             children: [
               Expanded(
@@ -383,7 +451,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                   controller: _stateController,
                   style: const TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(
-                    labelText: 'State',
+                    labelText: 'State *',
                     hintText: 'Enter state',
                   ),
                   onChanged: (_) => setState(() {}),
@@ -398,7 +466,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                   style: const TextStyle(color: AppColors.textPrimary),
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
-                    labelText: 'Pincode',
+                    labelText: 'Pincode *',
                     hintText: '000000',
                     counterText: '',
                   ),
@@ -441,7 +509,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
     );
   }
 
-  // ✅ Updated Step 2 with GST Dropdown and Conditional Logic
   Widget _buildStep2GstVerification() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -460,12 +527,10 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             ),
           ),
           const SizedBox(height: 24),
-
-          // --- 1. GST Status Dropdown ---
           DropdownButtonFormField<String>(
             value: _gstStatus,
             decoration: const InputDecoration(
-              labelText: 'Registration Type',
+              labelText: 'Registration Type *',
               prefixIcon: Icon(Icons.assignment_outlined),
             ),
             items: const [
@@ -478,12 +543,12 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             onChanged: (value) {
               setState(() {
                 _gstStatus = value!;
+                _verificationError = null;
+                _isGstVerified = false;
               });
             },
           ),
           const SizedBox(height: 24),
-
-          // --- 2. Conditional GSTIN Field ---
           if (_gstStatus == 'GST') ...[
             TextFormField(
               controller: _gstinController,
@@ -495,75 +560,118 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                 fontFamily: 'monospace',
               ),
               decoration: const InputDecoration(
-                labelText: 'GSTIN',
+                labelText: 'GSTIN *',
                 hintText: '22AAAAA0000A1Z5',
                 prefixIcon: Icon(Icons.verified_outlined),
                 counterText: '',
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: (_) => setState(() => _isGstVerified = false),
             ),
             const SizedBox(height: 16),
           ],
-
-          // --- 3. Legal Business Name ---
           TextFormField(
-            controller: _legalNameController,
-            style: const TextStyle(color: AppColors.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Legal Business Name',
-              hintText: _gstStatus == 'GST'
-                  ? 'As per GST certificate'
-                  : 'Trade name/Owner name',
-              prefixIcon: const Icon(Icons.business),
+            controller: _panController,
+            textCapitalization: TextCapitalization.characters,
+            maxLength: 10,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              letterSpacing: 2,
+              fontFamily: 'monospace',
             ),
-            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: 'PAN Number *',
+              hintText: 'ABCDE1234F',
+              prefixIcon: const Icon(Icons.credit_card),
+              counterText: '',
+              helperText: _gstStatus == 'GST'
+                  ? 'Must match GSTIN PAN'
+                  : 'Business/Owner PAN',
+            ),
+            onChanged: (_) => setState(() => _isGstVerified = false),
           ),
-          const SizedBox(height: 24),
-
-          // --- 4. Document Upload (Only for GST) ---
+          const SizedBox(height: 16),
           if (_gstStatus == 'GST') ...[
-            Text(
-              'Upload GST Certificate',
-              style: AppTextStyles.labelLarge.copyWith(
-                color: AppColors.textPrimary,
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isVerifying || !_validateGstForVerification()
+                    ? null
+                    : _verifyGSTDetails,
+                icon: _isVerifying
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+                    : Icon(_isGstVerified ? Icons.check_circle : Icons.verified_user),
+                label: Text(_isVerifying
+                    ? 'Verifying...'
+                    : _isGstVerified
+                    ? 'Verified'
+                    : 'Verify GST & PAN'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isGstVerified ? AppColors.success : AppColors.info,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: () {
-                _pickFile(); // Call the file picker function
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 20),
+            const SizedBox(height: 16),
+            if (_verificationError != null)
+              Container(
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: AppColors.textSecondary.withOpacity(0.3),
+                    color: AppColors.error.withValues(alpha: 0.3),
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  color: AppColors.surfaceVariant,
                 ),
-                child: Column(
+                child: Row(
                   children: [
-                    const Icon(
-                      Icons.cloud_upload_outlined,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tap to upload PDF or Image',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
+                    Icon(Icons.error_outline,
+                        color: AppColors.error, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _verificationError!,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.error,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
+            if (_isGstVerified)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppColors.success.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle,
+                        color: AppColors.success, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'GST and PAN verified successfully!',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.success,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 24),
           ],
-
-          // --- 5. Info Box ---
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -589,8 +697,8 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                 const SizedBox(height: 8),
                 Text(
                   _gstStatus == 'GST'
-                      ? '• Enables proper tax invoicing\n• Required for platform settlement'
-                      : '• You can update to GST details later\n• Business name must match bank account',
+                      ? '• GST verification is mandatory for tax compliance\n• Revenue over ₹20L/year requires GST registration\n• Verification will be completed instantly'
+                      : '• Non-GST businesses have annual revenue limit of ₹20L\n• You must upgrade to GST when you cross ₹20L\n• PAN verification is mandatory',
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -599,8 +707,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             ),
           ),
           const SizedBox(height: 24),
-
-          // --- 6. Consent Checkbox (Only for GST) ---
           if (_gstStatus == 'GST')
             InkWell(
               onTap: () => setState(() => _gstConsent = !_gstConsent),
@@ -617,7 +723,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                     ),
                     Expanded(
                       child: Text(
-                        'I confirm that the GST details provided are accurate.',
+                        'I confirm that the GST and PAN details provided are accurate and match my business registration.',
                         style: AppTextStyles.bodySmall.copyWith(
                           color: AppColors.textSecondary,
                         ),
@@ -630,6 +736,11 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
         ],
       ),
     );
+  }
+
+  bool _validateGstForVerification() {
+    return _gstinController.text.length == 15 &&
+        _panController.text.length == 10;
   }
 
   Widget _buildStep3CommercialSetup() {
@@ -650,7 +761,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             ),
           ),
           const SizedBox(height: 24),
-
           Text(
             'Discount Slab',
             style: AppTextStyles.labelLarge.copyWith(
@@ -673,7 +783,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             ],
           ),
           const SizedBox(height: 24),
-
           Text(
             'Settlement Mode',
             style: AppTextStyles.labelLarge.copyWith(
@@ -695,7 +804,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             Icons.flash_on,
           ),
           const SizedBox(height: 24),
-
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -734,7 +842,6 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
             ),
           ),
           const SizedBox(height: 24),
-
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -755,6 +862,7 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
                 ),
                 const SizedBox(height: 12),
                 _buildSummaryRow('Business', _businessNameController.text),
+                _buildSummaryRow('Registration', _gstStatus),
                 _buildSummaryRow(
                   'Category',
                   _getCategoryLabel(_selectedCategory),
@@ -818,11 +926,11 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
   }
 
   Widget _buildSettlementOption(
-    String value,
-    String title,
-    String description,
-    IconData icon,
-  ) {
+      String value,
+      String title,
+      String description,
+      IconData icon,
+      ) {
     final isSelected = _settlementMode == value;
     return Material(
       color: isSelected
@@ -930,16 +1038,16 @@ class _PartnerOnboardingPageState extends State<PartnerOnboardingPage> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: isValid && !_isLoading ? _nextStep : null,
+            onPressed: isValid && !_isLoading && !_isVerifying ? _nextStep : null,
             child: _isLoading
                 ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
                 : Text(isLastStep ? 'Complete Registration' : 'Continue'),
           ),
         ),

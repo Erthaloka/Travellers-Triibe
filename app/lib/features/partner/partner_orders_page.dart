@@ -197,7 +197,8 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
   Widget _buildOrderCard(Map<String, dynamic> order) {
     final status = order['status'] ?? 'PENDING';
     final isCompleted = status == 'COMPLETED';
-    final orderId = order['orderId'] ?? order['id'] ?? 'Unknown';
+    // ✅ FIXED: Use orderId field directly (TT-XXXXXX format)
+    final orderId = order['orderId'] as String? ?? 'Unknown';
     final user = order['userId'];
     final userPhone = user?['phone'] ?? 'Unknown';
     final originalAmount = (order['originalAmount'] as num?)?.toDouble() ?? 0;
@@ -210,6 +211,7 @@ class _PartnerOrdersPageState extends State<PartnerOrdersPage> {
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () {
+          // ✅ FIXED: Now passing correct orderId (TT-XXXXXX)
           context.go('/partner/orders/$orderId');
         },
         borderRadius: BorderRadius.circular(12),

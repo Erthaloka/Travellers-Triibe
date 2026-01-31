@@ -1,10 +1,11 @@
 /**
- * API Routes index
+ * API Routes index - UPDATED with verification routes -  index.ts
  */
 import { Router } from 'express';
 import authRoutes from './auth.js';
 import userRoutes from './users.js';
 import partnerRoutes from './partners.js';
+import verificationRoutes from './verification.routes.js';
 import orderRoutes from './orders.js';
 import paymentRoutes from './payments.js';
 import billRoutes from './bills.js';
@@ -24,6 +25,7 @@ router.get('/health', (_, res) => {
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/partners', partnerRoutes);
+router.use('/verification', verificationRoutes); // NEW: Verification routes
 router.use('/orders', orderRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/bills', billRoutes);

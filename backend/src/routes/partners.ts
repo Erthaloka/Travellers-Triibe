@@ -1,6 +1,6 @@
 /**
- * Partner routes - Business onboarding and management
- * UPDATED: Added auto-approve option for development
+ * Partner routes - Business onboarding and management with GST/Non-GST support - partners.ts
+ * UPDATED: Added GST verification, revenue tracking, and compliance endpoints
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
@@ -8,7 +8,7 @@ import QRCode from 'qrcode';
 import { asyncHandler, ApiError } from '../middleware/errorHandler.js';
 import { validateBody, validateParams } from '../middleware/validate.js';
 import { authenticate, requirePartner, requireAdmin } from '../middleware/auth.js';
-import { Partner, PartnerStatus, BusinessCategory, User, UserRole } from '../models/index.js';
+import { Partner, PartnerStatus, BusinessCategory, User, UserRole, VerificationStatus } from '../models/index.js';
 import { env } from '../config/env.js';
 
 const router = Router();
@@ -17,10 +17,17 @@ const router = Router();
 
 const onboardingSchema = z.object({
   businessName: z.string().min(2, 'Business name is required'),
+  legalBusinessName: z.string().min(2, 'Legal business name is required'),
   category: z.nativeEnum(BusinessCategory),
   description: z.string().optional(),
-  gstNumber: z.string().optional(),
-  panNumber: z.string().optional(),
+  isGstRegistered: z.boolean(),
+  gstNumber: z
+    .string()
+    .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, 'Invalid GSTIN format')
+    .optional(),
+  panNumber: z
+    .string()
+    .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format'),
   businessPhone: z.string().regex(/^\+91[6-9]\d{9}$/, 'Invalid phone number'),
   businessEmail: z.string().email('Invalid email'),
   address: z.object({
@@ -31,6 +38,7 @@ const onboardingSchema = z.object({
     pincode: z.string().regex(/^\d{6}$/, 'Invalid pincode'),
   }),
   discountRate: z.number().min(1).max(20).default(env.DISCOUNT_RATE_DEFAULT),
+  settlementMode: z.enum(['PLATFORM', 'DIRECT']).optional(),
   upiId: z.string().optional(),
   bankDetails: z
     .object({
@@ -52,9 +60,7 @@ const partnerIdSchema = z.object({
 
 /**
  * POST /api/partners/onboard
- * Complete partner onboarding (creates partner profile and adds role)
- * 
- * ✅ UPDATED: Auto-approve for development (set AUTO_APPROVE_PARTNERS=true in env)
+ * Complete partner onboarding with GST/Non-GST support
  */
 router.post(
   '/onboard',
@@ -66,30 +72,119 @@ router.post(
     // Check if partner profile already exists
     let partner = await Partner.findOne({ userId });
 
-    // ✅ UPDATED: Auto-approve based on environment variable
     const autoApprove = process.env.AUTO_APPROVE_PARTNERS === 'true';
     const initialStatus = autoApprove ? PartnerStatus.ACTIVE : PartnerStatus.PENDING;
 
+    const {
+      businessName,
+      legalBusinessName,
+      category,
+      description,
+      isGstRegistered,
+      gstNumber,
+      panNumber,
+      businessPhone,
+      businessEmail,
+      address,
+      discountRate,
+      settlementMode,
+      upiId,
+      bankDetails,
+    } = req.body;
+
     if (partner) {
       // Update existing profile
-      Object.assign(partner, req.body);
+      Object.assign(partner, {
+        businessName,
+        legalBusinessName,
+        category,
+        description,
+        isGstRegistered,
+        businessPhone,
+        businessEmail,
+        address,
+        discountRate: discountRate || partner.discountRate,
+        settlementMode: settlementMode || partner.settlementMode,
+        upiId,
+        bankDetails,
+      });
+
+      // Update verification details
+      if (isGstRegistered && gstNumber) {
+        partner.verificationDetails.gstin = {
+          number: gstNumber.toUpperCase(),
+          status: VerificationStatus.PENDING,
+        };
+      }
+      partner.verificationDetails.pan = {
+        number: panNumber.toUpperCase(),
+        status: VerificationStatus.PENDING,
+      };
+
       partner.status = initialStatus;
       
-      // If auto-approving, mark as verified
       if (autoApprove) {
         partner.isVerified = true;
         partner.verifiedAt = new Date();
+        partner.activatedAt = new Date();
       }
       
       await partner.save();
     } else {
       // Create new partner profile
+      const currentFY = getCurrentFinancialYear();
+      
       partner = await Partner.create({
         userId,
-        ...req.body,
+        businessName,
+        legalBusinessName,
+        category,
+        description,
+        isGstRegistered,
+        businessPhone,
+        businessEmail,
+        address: {
+          ...address,
+          country: 'India',
+        },
+        verificationDetails: {
+          ...(isGstRegistered && gstNumber && {
+            gstin: {
+              number: gstNumber.toUpperCase(),
+              status: VerificationStatus.PENDING,
+            },
+          }),
+          pan: {
+            number: panNumber.toUpperCase(),
+            status: VerificationStatus.PENDING,
+          },
+        },
+        discountRate: discountRate || env.DISCOUNT_RATE_DEFAULT,
+        settlementMode: settlementMode || 'PLATFORM',
+        upiId,
+        bankDetails,
         status: initialStatus,
         isVerified: autoApprove,
         verifiedAt: autoApprove ? new Date() : undefined,
+        activatedAt: autoApprove ? new Date() : undefined,
+        onboardedAt: new Date(),
+        revenueTracking: [
+          {
+            financialYear: currentFY,
+            totalRevenue: 0,
+            gstApplicable: isGstRegistered,
+            thresholdWarnings: {
+              warning16L: false,
+              warning19L: false,
+              threshold20L: false,
+            },
+            lastCalculatedAt: new Date(),
+          },
+        ],
+        payoutControl: {
+          enabled: true,
+          requiresGstForUnblock: false,
+        },
       });
     }
 
@@ -100,9 +195,6 @@ router.post(
         { $addToSet: { roles: UserRole.PARTNER } },
         { new: true }
       );
-      
-      // Update the user object in request for consistency
-      req.user!.roles.push(UserRole.PARTNER);
     }
 
     // Generate QR code data
@@ -148,6 +240,98 @@ router.get(
     res.json({
       success: true,
       data: partner,
+    });
+  })
+);
+
+/**
+ * GET /api/partners/revenue-summary
+ * Get partner's revenue summary for current financial year
+ */
+router.get(
+  '/revenue-summary',
+  authenticate,
+  requirePartner,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!._id;
+
+    const partner = await Partner.findOne({ userId });
+    if (!partner) {
+      throw new ApiError(404, 'Partner profile not found');
+    }
+
+    const currentFY = partner.getCurrentFinancialYear();
+    const currentRevenue = partner.getCurrentYearRevenue();
+    const gstThreshold = parseInt(process.env.GST_THRESHOLD || '2000000000');
+    const remainingBeforeGST = Math.max(0, gstThreshold - currentRevenue);
+    const percentageUsed = (currentRevenue / gstThreshold) * 100;
+
+    const tracking = partner.revenueTracking.find(
+      (r) => r.financialYear === currentFY
+    );
+
+    res.json({
+      success: true,
+      data: {
+        financialYear: currentFY,
+        currentRevenue,
+        gstThreshold,
+        remainingBeforeGST,
+        percentageUsed: Math.min(100, percentageUsed),
+        isGstRequired: currentRevenue >= gstThreshold,
+        isGstRegistered: partner.isGstRegistered,
+        payoutBlocked: !partner.payoutControl.enabled,
+        warnings: tracking?.thresholdWarnings || {
+          warning16L: false,
+          warning19L: false,
+          threshold20L: false,
+        },
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/partners/compliance-status
+ * Get partner's compliance status
+ */
+router.get(
+  '/compliance-status',
+  authenticate,
+  requirePartner,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!._id;
+
+    const partner = await Partner.findOne({ userId });
+    if (!partner) {
+      throw new ApiError(404, 'Partner profile not found');
+    }
+
+    const currentRevenue = partner.getCurrentYearRevenue();
+    const gstThreshold = parseInt(process.env.GST_THRESHOLD || '2000000000');
+
+    res.json({
+      success: true,
+      data: {
+        isGstRegistered: partner.isGstRegistered,
+        gstDetails: partner.verificationDetails.gstin,
+        panDetails: partner.verificationDetails.pan,
+        revenue: {
+          current: currentRevenue,
+          threshold: gstThreshold,
+          isGstRequired: currentRevenue >= gstThreshold,
+        },
+        payoutStatus: {
+          enabled: partner.payoutControl.enabled,
+          blockedAt: partner.payoutControl.blockedAt,
+          blockReason: partner.payoutControl.blockReason,
+          requiresGst: partner.payoutControl.requiresGstForUnblock,
+        },
+        compliance: {
+          isCompliant: partner.isGstRegistered || currentRevenue < gstThreshold,
+          requiresAction: !partner.isGstRegistered && currentRevenue >= gstThreshold,
+        },
+      },
     });
   })
 );
@@ -201,7 +385,10 @@ router.get(
       throw new ApiError(403, 'Partner account is not active');
     }
 
-    // Generate QR code with partner payment data
+    if (!partner.canAcceptOrders()) {
+      throw new ApiError(403, 'Partner cannot accept orders at this time');
+    }
+
     const qrData = {
       type: 'TT_PAYMENT',
       partnerId: partner._id,
@@ -242,17 +429,14 @@ router.get(
       throw new ApiError(404, 'Partner profile not found');
     }
 
-    // Get date ranges
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // Aggregate order data
     const { Order, OrderStatus } = await import('../models/index.js');
 
     const [dailyStats, weeklyTrend] = await Promise.all([
-      // Daily stats for the last 7 days
       Order.aggregate([
         {
           $match: {
@@ -273,7 +457,6 @@ router.get(
         },
         { $sort: { _id: 1 } },
       ]),
-      // Category breakdown (if applicable)
       Order.aggregate([
         {
           $match: {
@@ -299,6 +482,7 @@ router.get(
         dailyStats,
         peakHours: weeklyTrend,
         discountRate: partner.discountRate,
+        revenueTracking: partner.revenueTracking,
       },
     });
   })
@@ -317,7 +501,7 @@ router.get(
     const { id } = req.params;
 
     const partner = await Partner.findById(id).select(
-      'businessName category discountRate address.city status'
+      'businessName category discountRate address.city status payoutControl.enabled'
     );
 
     if (!partner) {
@@ -326,6 +510,10 @@ router.get(
 
     if (!partner.isActive()) {
       throw new ApiError(403, 'Partner is not accepting payments');
+    }
+
+    if (!partner.canAcceptOrders()) {
+      throw new ApiError(403, 'Partner cannot accept orders at this time');
     }
 
     res.json({
@@ -368,7 +556,7 @@ router.put(
   validateParams(partnerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { approved, reason: _reason } = req.body;
+    const { approved, reason } = req.body;
 
     const partner = await Partner.findById(id);
     if (!partner) {
@@ -379,9 +567,10 @@ router.put(
       partner.status = PartnerStatus.ACTIVE;
       partner.isVerified = true;
       partner.verifiedAt = new Date();
+      partner.activatedAt = new Date();
     } else {
       partner.status = PartnerStatus.REJECTED;
-      // Could store rejection reason (_reason) in metadata
+      // Could store rejection reason
     }
 
     await partner.save();
@@ -393,5 +582,19 @@ router.put(
     });
   })
 );
+
+// ============== Helper Functions ==============
+
+function getCurrentFinancialYear(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  
+  if (month >= 4) {
+    return `FY${year}-${(year + 1).toString().slice(2)}`;
+  } else {
+    return `FY${year - 1}-${year.toString().slice(2)}`;
+  }
+}
 
 export default router;

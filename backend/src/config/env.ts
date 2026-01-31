@@ -36,6 +36,17 @@ const envSchema = z.object({
   // App Settings
   DISCOUNT_RATE_DEFAULT: z.string().default('5').transform(Number),
   MAX_DISCOUNT_RATE: z.string().default('15').transform(Number),
+
+  // Add inside envSchema
+  APICLUB_BASE_URL: z.string().url(),
+  APICLUB_API_KEY: z.string().min(1),
+
+  PLANAPI_BASE_URL: z.string().url(),
+  PLANAPI_API_KEY: z.string().min(1),
+
+  IDCENTRAL_BASE_URL: z.string().url(),
+  IDCENTRAL_API_KEY: z.string().min(1),
+
 });
 
 // Parse and validate environment

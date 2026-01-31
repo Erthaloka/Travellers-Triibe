@@ -123,8 +123,8 @@ router.post(
     const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } =
       req.body;
 
-    // Find order
-    const order = await Order.findById(orderId);
+    // Find order by orderId (TT-XXXXXX) instead of _id
+    const order = await Order.findOne({ orderId: orderId });
     if (!order) {
       throw new ApiError(404, 'Order not found');
     }
